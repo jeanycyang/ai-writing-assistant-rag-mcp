@@ -85,7 +85,7 @@ The ingestion pipeline:
 - computes embeddings with `sentence-transformers`
 - upserts records by stable external ids with `source_hash` stored for inspection
 
-Default embedding choice: `BAAI/bge-m3`. It is multilingual and practical for Chinese text on a Mac-centric local setup. The embedding layer is abstracted so a different provider can be added later without changing the retrieval API.
+Default embedding choice: `BAAI/bge-m3`. It is multilingual and practical for Traditional Chinese (Taiwan) text on a Mac-centric local setup. The embedding layer is abstracted so a different provider can be added later without changing the retrieval API.
 
 ## API Overview
 
@@ -109,14 +109,14 @@ Both APIs use explicit Pydantic request/response models and standardized citatio
 curl -X POST http://localhost:8002/chat \
   -H 'Content-Type: application/json' \
   -d '{
-    "message": "When was Captain Ren first mentioned but not yet present?"
+    "message": "任隊長第一次被提到、但人還沒出現，是在哪一段？"
   }'
 ```
 
 Other example prompts:
 
-- `What happened before the confrontation with Ren?`
-- `Show the deeper original text behind this summary.`
+- `任隊長和林妍公開對峙之前，先發生了什麼事？`
+- `把這段摘要背後對應的原文也找出來。`
 
 ## Testing
 
@@ -138,6 +138,7 @@ docker compose up --build
 - chat history is request-scoped and not persisted.
 - `OpenAIProvider` is not implemented yet, but the provider abstraction and provider-neutral tool specs are in place.
 - local embedding model download can take time on first run.
+- the sample data and parsing defaults now assume Traditional Chinese (Taiwan) source material.
 
 ## Future Extension Path
 

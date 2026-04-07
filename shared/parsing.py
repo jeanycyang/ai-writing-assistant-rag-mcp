@@ -8,6 +8,7 @@ from pathlib import Path
 
 SUMMARY_HEADER_RE = re.compile(r"^##\s+(?P<paragraph>\d+)\s*$")
 RAW_HEADER_RE = re.compile(r"^##\s+(?P<paragraph>\d+)\s*$")
+LIST_SPLIT_RE = re.compile(r"[,\uFF0C\u3001;\uFF1B]+")
 
 REQUIRED_SUMMARY_FIELDS = {
     "priority_score",
@@ -63,7 +64,7 @@ def normalize_list(value: str | list[str]) -> list[str]:
         return []
     if stripped.startswith("[") and stripped.endswith("]"):
         stripped = stripped[1:-1]
-    parts = [part.strip() for part in stripped.split(",")]
+    parts = [part.strip() for part in LIST_SPLIT_RE.split(stripped)]
     return [part for part in parts if part]
 
 
@@ -165,9 +166,14 @@ def _chunk_text(text: str, chunk_size: int, overlap: int) -> list[str]:
     while start < len(normalized):
         end = min(len(normalized), start + chunk_size)
         if end < len(normalized):
-            boundary = normalized.rfind(" ", start, end)
+            sentence_boundaries = "。！？；.!?;\n"
+            boundary = max(normalized.rfind(marker, start, end) for marker in sentence_boundaries)
             if boundary > start:
-                end = boundary
+                end = boundary + 1
+            else:
+                space_boundary = normalized.rfind(" ", start, end)
+                if space_boundary > start:
+                    end = space_boundary
         chunk = normalized[start:end].strip()
         if chunk:
             chunks.append(chunk)

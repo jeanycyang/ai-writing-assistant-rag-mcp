@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from shared.parsing import parse_raw_file, parse_summary_file
+from shared.parsing import normalize_list, parse_raw_file, parse_summary_file
 
 
 def test_parse_summary_file_reads_structured_fields() -> None:
@@ -27,3 +27,7 @@ def test_parse_raw_file_chunks_text() -> None:
     assert len(records) >= 3
     assert records[0].chapter_id == "episode_01"
     assert records[0].paragraph_id == 1
+
+
+def test_normalize_list_supports_traditional_chinese_delimiters() -> None:
+    assert normalize_list("林妍、梅子，任隊長；委員會") == ["林妍", "梅子", "任隊長", "委員會"]

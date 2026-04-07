@@ -19,7 +19,7 @@ class FakeProvider:
                         {
                             "function": {
                                 "name": "search_episode_summaries",
-                                "arguments": {"query": "When was Ren first mentioned?", "top_k": 2},
+                                "arguments": {"query": "任隊長第一次被提到是在哪裡？", "top_k": 2},
                             }
                         }
                     ],
@@ -28,7 +28,7 @@ class FakeProvider:
         return {
             "message": {
                 "role": "assistant",
-                "content": "Ren is first mentioned in episode_01 paragraph 1 before appearing in person.",
+                "content": "任隊長在 episode_01 的第 1 段先被提到，之後才正式現身。",
             }
         }
 
@@ -61,8 +61,8 @@ def test_run_chat_uses_summary_search_first(monkeypatch) -> None:
     monkeypatch.setattr(chat, "get_llm_provider", lambda: FakeProvider())
     monkeypatch.setattr(chat, "RagApiClient", FakeRagClient)
 
-    response = chat.run_chat(ChatRequest(message="When was Ren first mentioned?"))
+    response = chat.run_chat(ChatRequest(message="任隊長第一次被提到是在哪裡？"))
 
-    assert "first mentioned" in response.answer
+    assert "先被提到" in response.answer
     assert response.debug.tool_calls[0].tool_name == "search_episode_summaries"
     assert response.citations[0].chapter_id == "episode_01"
