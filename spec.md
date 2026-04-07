@@ -61,6 +61,67 @@ Requirements:
 
 # Architecture
 
+```text
++----------------------------- macOS host ------------------------------+
+|                                                                      |
+|  +------------------------+                                          |
+|  | user / local app       |                                          |
+|  | curl / UI / client     |                                          |
+|  +------------------------+                                          |
+|              |                                                       |
+|              | HTTP to published agent-api port                      |
+|              v                                                       |
+|  +------------------------+                                          |
+|  | Ollama                 |                                          |
+|  | hauhau-gemma4-e4b-q4km |                                          |
+|  +------------------------+                                          |
+|                                                                      |
+|  +------------------------+                                          |
+|  | local ingestion script |                                          |
+|  | parse summaries/raw    |                                          |
+|  | build embeddings       |                                          |
+|  +-----------+------------+                                          |
+|              |                                                       |
+|              | SQL to published postgres port                        |
++--------------|-------------------------------------------------------+
+               |
+               | containers -> host via host.docker.internal
+               | host -> containers via published ports
+               v
++--------------------------- Docker Compose ----------------------------+
+|                                                                       |
+|  +------------------------+        HTTP        +--------------------+ |
+|  | agent-api              | -----------------> | rag-api            | |
+|  | FastAPI chat/tool loop | <----------------- | FastAPI retrieval  | |
+|  +-----------+------------+                    +---------+----------+ |
+|              |                                             |          |
+|              | HTTP via host.docker.internal               | SQL      |
+|              v                                             v          |
+|  +------------------------+                    +--------------------+ |
+|  | Ollama on macOS host   |                    | postgres + pgvector| |
+|  +------------------------+                    | summary_chunks     | |
+|                                                | raw_chunks         | |
+|                                                +--------------------+ |
+|                                                                       |
++----------------------------------------------------------------------+
+
+Deployment intent:
+
+- `agent-api`, `rag-api`, and `postgres` run in Docker Compose
+- Ollama runs on the macOS host
+- the local ingestion script runs on the macOS host and writes to PostgreSQL
+- the user/client calls the Dockerized `agent-api`
+
+Summary-first retrieval flow:
+
+user query
+  -> agent-api
+  -> search_episode_summaries
+  -> if insufficient: get_linked_original_text or search_original_text
+  -> agent-api composes cited answer
+  -> user
+```
+
 Implement these components:
 
 1. `postgres`

@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 
 from pydantic import Field
@@ -31,6 +32,12 @@ class Settings(BaseSettings):
 
     summary_data_dir: str = "data/sample/summaries"
     raw_data_dir: str = "data/sample/raw"
+
+    @property
+    def effective_database_url(self) -> str:
+        if os.getenv("SERVICE_NAME"):
+            return self.database_url
+        return self.local_database_url
 
 
 @lru_cache(maxsize=1)
