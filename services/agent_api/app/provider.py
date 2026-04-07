@@ -28,6 +28,7 @@ class OllamaProvider(LLMProvider):
     def __init__(self, settings: Settings):
         self._settings = settings
         self._client = httpx.Client(timeout=settings.ollama_request_timeout)
+        self._health_client = httpx.Client(timeout=settings.ollama_health_timeout)
 
     def build_tool_definitions(self) -> list[dict[str, Any]]:
         return [
@@ -56,7 +57,7 @@ class OllamaProvider(LLMProvider):
         return response.json()
 
     def healthcheck(self) -> dict[str, Any]:
-        response = self._client.get(f"{self._settings.ollama_base_url}/api/tags")
+        response = self._health_client.get(f"{self._settings.ollama_base_url}/api/tags")
         response.raise_for_status()
         payload = response.json()
         model_names = [model.get("name", "") for model in payload.get("models", [])]

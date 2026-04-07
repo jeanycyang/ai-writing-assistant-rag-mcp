@@ -101,6 +101,9 @@ class ToolCallDebug(BaseModel):
 class ChatDebugInfo(BaseModel):
     provider: str
     model: str
+    iterations: int = 0
+    unique_citation_count: int = 0
+    completed_without_tool_call: bool = False
     tool_calls: list[ToolCallDebug] = Field(default_factory=list)
 
 

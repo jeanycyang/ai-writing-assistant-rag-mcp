@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://host.docker.internal:11434"
     ollama_model: str = "hauhau-gemma4-e4b-q4km"
     ollama_request_timeout: float = 120.0
+    ollama_health_timeout: float = 5.0
 
     embedding_provider: str = "sentence_transformers"
     embedding_model: str = "BAAI/bge-m3"

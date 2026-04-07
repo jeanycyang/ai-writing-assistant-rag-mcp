@@ -17,7 +17,12 @@ app = FastAPI(title="fanfiction-rag-api")
 
 
 @app.get("/healthz")
-def healthz(db: Session = Depends(get_db)) -> dict[str, str]:
+def healthz() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/readyz")
+def readyz(db: Session = Depends(get_db)) -> dict[str, str]:
     db.execute(text("SELECT 1"))
     return {"status": "ok"}
 

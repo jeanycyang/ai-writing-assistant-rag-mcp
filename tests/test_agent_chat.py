@@ -69,6 +69,9 @@ def test_run_chat_uses_summary_search_first(monkeypatch) -> None:
     response = chat.run_chat(ChatRequest(message="任隊長第一次被提到是在哪裡？"))
 
     assert "先被提到" in response.answer
+    assert response.debug.iterations == 2
+    assert response.debug.unique_citation_count == 1
+    assert response.debug.completed_without_tool_call is False
     assert response.debug.tool_calls[0].tool_name == "search_episode_summaries"
     assert response.citations[0].chapter_id == "episode_01"
 

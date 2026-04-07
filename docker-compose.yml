@@ -33,7 +33,7 @@ services:
     ports:
       - "${RAG_API_PORT:-8001}:8001"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/healthz').read()"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/readyz').read()"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -55,7 +55,7 @@ services:
     ports:
       - "${AGENT_API_PORT:-8002}:8002"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/healthz').read()"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/readyz').read()"]
       interval: 15s
       timeout: 5s
       retries: 5

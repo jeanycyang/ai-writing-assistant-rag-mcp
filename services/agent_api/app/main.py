@@ -10,7 +10,12 @@ app = FastAPI(title="fanfiction-agent-api")
 
 
 @app.get("/healthz")
-def healthz() -> dict[str, object]:
+def healthz() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/readyz")
+def readyz() -> dict[str, object]:
     dependencies: dict[str, object] = {}
     overall_status = "ok"
 
@@ -22,6 +27,8 @@ def healthz() -> dict[str, object]:
 
     try:
         dependencies["llm_provider"] = get_llm_provider().healthcheck()
+        if not dependencies["llm_provider"].get("model_available", False):
+            overall_status = "degraded"
     except httpx.HTTPError as exc:
         overall_status = "degraded"
         dependencies["llm_provider"] = {"status": "error", "detail": str(exc)}

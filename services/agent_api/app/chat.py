@@ -75,7 +75,8 @@ def run_chat(request: ChatRequest) -> ChatResponse:
     all_citations: list[Citation] = []
     debug = ChatDebugInfo(provider=settings.llm_provider, model=settings.ollama_model, tool_calls=[])
 
-    for _ in range(8):
+    for iteration in range(1, 9):
+        debug.iterations = iteration
         try:
             payload = provider.complete(messages)
         except httpx.HTTPError as exc:
@@ -84,7 +85,10 @@ def run_chat(request: ChatRequest) -> ChatResponse:
         tool_calls = extract_tool_calls(message)
         if not tool_calls:
             answer = message.get("content", "")
-            return ChatResponse(answer=answer, citations=_dedupe_citations(all_citations), debug=debug)
+            deduped_citations = _dedupe_citations(all_citations)
+            debug.unique_citation_count = len(deduped_citations)
+            debug.completed_without_tool_call = len(debug.tool_calls) == 0
+            return ChatResponse(answer=answer, citations=deduped_citations, debug=debug)
 
         messages.append(
             {
