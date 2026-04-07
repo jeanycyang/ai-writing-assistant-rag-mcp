@@ -15,6 +15,13 @@ Retrieval flow must be:
 
 This is for fanfiction writing assistance based on episode-by-episode plot text.
 
+Important source-language requirement:
+
+* both the structured summaries and the raw/original text are in Traditional Chinese (Taiwan)
+* preserve Traditional Chinese throughout ingestion, storage, retrieval, and answers
+* do not convert source text to Simplified Chinese
+* do not normalize away Taiwan-specific wording unless explicitly requested
+
 # Core stack
 
 Use:
@@ -315,6 +322,7 @@ Guidelines:
 * default to one provider, but make it easy to swap later
 * do not assume the chat model and embedding model are the same
 * keep the embedding provider configurable via environment variables
+* optimize for Traditional Chinese (Taiwan) retrieval quality, not generic mixed-language defaults
 
 Explain your choice briefly in README.
 

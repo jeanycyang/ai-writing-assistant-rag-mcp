@@ -1,0 +1,65 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: fanfic-rag-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rag-api:
+    build:
+      context: .
+      dockerfile: services/rag_api/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      SERVICE_NAME: rag-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${RAG_API_PORT:-8001}:8001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/healthz').read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  agent-api:
+    build:
+      context: .
+      dockerfile: services/agent_api/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      RAG_API_URL: ${RAG_API_URL}
+      SERVICE_NAME: agent-api
+    depends_on:
+      rag-api:
+        condition: service_healthy
+    ports:
+      - "${AGENT_API_PORT:-8002}:8002"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/healthz').read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+volumes:
+  postgres_data:
