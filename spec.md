@@ -170,15 +170,24 @@ Current `/chat` debug contract:
 
 Current performance finding:
 
-* `search_episode_summaries` is the dominant slow step on first call
-* that timing currently includes local query embedding generation in `agent-api`
-* the likely dominant cost is embedding model cold start (`sentence-transformers` / `BAAI/bge-m3`)
+* the original first-call bottleneck was `search_episode_summaries`
+* after startup preload and split timing, the meaningful substep is `search_episode_summaries_embed_query`
+* PostgreSQL retrieval itself is comparatively fast
 * linked raw retrieval is comparatively fast
 
 Next optimization target:
 
-* optimize `search_episode_summaries`
-* specifically separate embedding time from retrieval time and reduce embedding cold-start cost
+* continue optimizing `search_episode_summaries_embed_query`
+* if needed, evaluate a smaller embedding model or additional warmup/caching strategies
+
+Current TODOs worth tracking:
+
+* broaden live end-to-end validation of the rewritten `/chat` beyond the first successful prompt
+* reduce citation noise for direct factual answers
+* tighten answer style for concise lookup questions
+* migrate startup hooks from FastAPI `on_event("startup")` to lifespan
+* refresh docs that may still imply the old tool-driven `/chat` loop
+* run the full test suite after the latest performance changes
 
 4. local file-based ingestion script
 

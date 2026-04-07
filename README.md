@@ -157,9 +157,9 @@ When `include_timing` is enabled, the response includes:
 
 Current profiling finding:
 
-- the first-call bottleneck is `search_episode_summaries`
-- that timing bucket currently includes query embedding generation inside `agent-api`
-- the most likely dominant cost is cold-start loading of the local embedding model (`sentence-transformers` + `BAAI/bge-m3`), not PostgreSQL retrieval itself
+- the original first-call bottleneck was `search_episode_summaries`
+- after startup preload and split timing, the main summary-search cost is now dominated by query embedding generation rather than PostgreSQL retrieval
+- `search_episode_summaries_embed_query` is the useful timing to watch for further optimization
 - `get_linked_original_text` is fast in comparison, so raw linked retrieval is not the current hotspot
 
 Other example prompts:
@@ -211,6 +211,15 @@ docker compose up --build
 - `OpenAIProvider` is not implemented yet, but the provider abstraction and provider-neutral tool specs are in place.
 - local embedding model download can take time on first run.
 - the sample data and parsing defaults now assume Traditional Chinese (Taiwan) source material.
+
+## Current TODOs
+
+- broaden live end-to-end validation of the rewritten `/chat` beyond the initial successful prompt set
+- trim citations so direct factual answers return only the most relevant evidence instead of a long citation list
+- tighten answer style for direct lookup questions so replies are shorter and less repetitive
+- migrate `agent-api` startup wiring away from FastAPI `on_event("startup")` to lifespan
+- refresh README/spec wording anywhere that still implies the old model-driven multi-turn `/chat` loop
+- run the full test suite after the latest `search_episode_summaries` optimization work
 
 ## Future Extension Path
 
