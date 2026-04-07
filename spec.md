@@ -92,7 +92,7 @@ Requirements:
 |                                                                       |
 |  +------------------------+        HTTP        +--------------------+ |
 |  | agent-api              | -----------------> | rag-api            | |
-|  | FastAPI chat/tool loop | <----------------- | FastAPI retrieval  | |
+|  | FastAPI chat orchestration                        | FastAPI retrieval  | |
 |  +-----------+------------+                    +---------+----------+ |
 |              |                                             |          |
 |              | HTTP via host.docker.internal               | SQL      |
@@ -183,9 +183,8 @@ Next optimization target:
 Current TODOs worth tracking:
 
 * broaden live end-to-end validation of the rewritten `/chat` beyond the first successful prompt
-* reduce citation noise for direct factual answers
-* tighten answer style for concise lookup questions
-* migrate startup hooks from FastAPI `on_event("startup")` to lifespan
+* continue reducing citation noise for direct factual answers
+* continue tightening answer style for concise lookup questions
 * refresh docs that may still imply the old tool-driven `/chat` loop
 * run the full test suite after the latest performance changes
 
@@ -479,10 +478,8 @@ Implement:
 The `/chat` endpoint should:
 
 * accept a user message
-* call Ollama chat API
-* expose retrieval tools to the model
-* execute tool calls
-* continue the loop until final assistant text is produced
+* run deterministic summary-first retrieval
+* call Ollama once with the selected evidence context
 * return:
 
   * assistant answer
@@ -497,8 +494,8 @@ Requirements:
 
 * model configurable via env var
 * default model `hauhau-gemma4-e4b-q4km`
-* support tool calling
-* support multi-turn tool loop
+* support plain chat generation for the current deterministic `/chat` path
+* keep the provider abstraction compatible with tool calling if a future workflow needs it
 * keep message history in request scope for now; no DB persistence needed unless easy
 * assume the model is already installed locally in Ollama, but document how to change the model name in `.env`
 

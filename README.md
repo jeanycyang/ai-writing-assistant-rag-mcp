@@ -150,9 +150,11 @@ When `include_timing` is enabled, the response includes:
 
 - `debug.elapsed_ms`: total `/chat` time
 - `debug.step_timings`: per-step timings for:
-  - `search_episode_summaries`
+  - `search_episode_summaries_embed_query`
+  - `search_episode_summaries_rag_api`
   - `get_linked_original_text`
-  - `search_original_text` when fallback is used
+  - `search_original_text_embed_query` when fallback is used
+  - `search_original_text_rag_api` when fallback is used
   - `final_generation`
 
 Current profiling finding:
@@ -215,10 +217,9 @@ docker compose up --build
 ## Current TODOs
 
 - broaden live end-to-end validation of the rewritten `/chat` beyond the initial successful prompt set
-- trim citations so direct factual answers return only the most relevant evidence instead of a long citation list
-- tighten answer style for direct lookup questions so replies are shorter and less repetitive
-- migrate `agent-api` startup wiring away from FastAPI `on_event("startup")` to lifespan
-- refresh README/spec wording anywhere that still implies the old model-driven multi-turn `/chat` loop
+- continue tuning citation trimming so direct factual answers keep only the strongest evidence
+- continue tightening answer style for direct lookup questions so replies stay shorter and less repetitive
+- refresh any remaining README/spec wording that still implies the old model-driven multi-turn `/chat` loop
 - run the full test suite after the latest `search_episode_summaries` optimization work
 
 ## Future Extension Path

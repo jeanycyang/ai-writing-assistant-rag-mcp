@@ -1,5 +1,6 @@
 import httpx
 import pytest
+from fastapi.testclient import TestClient
 
 from services.agent_api.app import main
 from services.agent_api.app.client import RagApiClient
@@ -25,15 +26,16 @@ def test_healthz_reports_process_up():
     assert payload["status"] == "ok"
 
 
-def test_startup_preloads_embedding_provider(monkeypatch):
+def test_lifespan_preloads_embedding_provider(monkeypatch):
     called = {"value": False}
 
     def fake_preload():
         called["value"] = True
 
-    monkeypatch.setattr(main, "preload_embedding_provider", fake_preload)
+    monkeypatch.setattr(main, "preload_agent_dependencies", fake_preload)
 
-    main.startup()
+    with TestClient(main.app):
+        pass
     assert called["value"] is True
 
 

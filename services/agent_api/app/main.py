@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 import httpx
 from fastapi import FastAPI
 
@@ -7,12 +9,18 @@ from services.agent_api.app.provider import get_llm_provider
 from shared.embeddings import preload_embedding_provider
 from shared.schemas import ChatRequest, ChatResponse
 
-app = FastAPI(title="fanfiction-agent-api")
 
-
-@app.on_event("startup")
-def startup() -> None:
+def preload_agent_dependencies() -> None:
     preload_embedding_provider()
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    preload_agent_dependencies()
+    yield
+
+
+app = FastAPI(title="fanfiction-agent-api", lifespan=lifespan)
 
 
 @app.get("/healthz")
