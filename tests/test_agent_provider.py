@@ -60,3 +60,4 @@ def test_ollama_complete_omits_tools_when_not_requested() -> None:
 
     assert "tools" not in captured["json"]
     assert captured["json"]["think"] is False
+    assert captured["json"]["options"]["num_predict"] == settings.ollama_num_predict

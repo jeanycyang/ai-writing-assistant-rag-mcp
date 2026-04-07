@@ -20,9 +20,19 @@ Rules:
 - Use linked original text when available to support scene detail and wording.
 - If the evidence is insufficient or conflicting, say so explicitly.
 - Preserve Traditional Chinese (Taiwan) wording.
-- Keep the answer concise and directly answer the user's question first.
-- After the answer, add a short evidence note that cites chapter / paragraph references when available.
+- Start with the direct answer in the first sentence.
+- Keep the whole answer brief: usually 2-4 sentences, no headings, no bullet lists.
+- Prefer the strongest single supporting passage instead of listing every possible clue.
+- End with one short evidence sentence citing chapter / paragraph references when available.
 """
+
+SUMMARY_TOP_K = 2
+RAW_TOP_K = 2
+LINKED_RAW_TOP_K_PER_HIT = 1
+MAX_FINAL_SUMMARY_HITS = 2
+MAX_FINAL_LINKED_RAW_HITS = 2
+MAX_FINAL_RAW_HITS = 1
+MAX_RETURNED_CITATIONS = 4
 
 
 def _tool_result_message(tool_name: str, payload: dict[str, Any]) -> str:
@@ -60,6 +70,23 @@ def _dedupe_citations(citations: list[Citation]) -> list[Citation]:
         seen.add(key)
         deduped.append(citation)
     return deduped
+
+
+def _sort_citations(citations: list[Citation]) -> list[Citation]:
+    return sorted(
+        citations,
+        key=lambda citation: (
+            0 if citation.citation_type == "raw" else 1,
+            -(citation.score or 0.0),
+            citation.chapter_id,
+            citation.paragraph_id if citation.paragraph_id is not None else 10**9,
+            citation.chunk_id if citation.chunk_id is not None else 10**9,
+        ),
+    )
+
+
+def _select_hits(result: dict[str, Any], limit: int) -> dict[str, Any]:
+    return {"hits": list(result.get("hits", []))[:limit]}
 
 
 def _extract_summary_hit_ids(result: dict[str, Any]) -> list[str]:
@@ -116,14 +143,18 @@ def _build_final_messages(
     linked_raw_result: dict[str, Any],
     raw_result: dict[str, Any],
 ) -> list[dict[str, str]]:
+    summary_context = _select_hits(summary_result, MAX_FINAL_SUMMARY_HITS)
+    linked_raw_context = _select_hits(linked_raw_result, MAX_FINAL_LINKED_RAW_HITS)
+    raw_context = _select_hits(raw_result, MAX_FINAL_RAW_HITS)
     history_lines = [f"{item.role}: {item.content}" for item in request.history]
     history_block = "\n".join(history_lines) if history_lines else "(none)"
     user_prompt = (
         f"User question:\n{request.message}\n\n"
         f"Conversation history:\n{history_block}\n\n"
-        f"Summary search results:\n{_format_summary_hits(summary_result)}\n\n"
-        f"Linked original text:\n{_format_raw_hits(linked_raw_result)}\n\n"
-        f"Direct raw search fallback:\n{_format_raw_hits(raw_result)}\n"
+        "Use only the most relevant evidence below. Do not restate the entire context.\n\n"
+        f"Summary search results:\n{_format_summary_hits(summary_context)}\n\n"
+        f"Linked original text:\n{_format_raw_hits(linked_raw_context)}\n\n"
+        f"Direct raw search fallback:\n{_format_raw_hits(raw_context)}\n"
     )
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -151,7 +182,7 @@ def run_chat(request: ChatRequest) -> ChatResponse:
     try:
         if include_timing:
             summary_result, summary_timings = rag_client.search_summaries_with_timings(
-                {"query": request.message, "top_k": 3}
+                {"query": request.message, "top_k": SUMMARY_TOP_K}
             )
             debug.step_timings.append(
                 ChatStepTiming(step="search_episode_summaries_embed_query", elapsed_ms=summary_timings["embedding_ms"])
@@ -160,14 +191,14 @@ def run_chat(request: ChatRequest) -> ChatResponse:
                 ChatStepTiming(step="search_episode_summaries_rag_api", elapsed_ms=summary_timings["rag_api_ms"])
             )
         else:
-            summary_result = rag_client.search_summaries({"query": request.message, "top_k": 3})
+            summary_result = rag_client.search_summaries({"query": request.message, "top_k": SUMMARY_TOP_K})
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"rag-api request failed during search_episode_summaries: {exc}") from exc
     all_citations.extend(_collect_citations(summary_result))
     debug.tool_calls.append(
         ToolCallDebug(
             tool_name="search_episode_summaries",
-            arguments={"query": request.message, "top_k": 3},
+            arguments={"query": request.message, "top_k": SUMMARY_TOP_K},
             result_count=len(summary_result.get("hits", [])),
         )
     )
@@ -177,7 +208,9 @@ def run_chat(request: ChatRequest) -> ChatResponse:
     if summary_hit_ids:
         step_started_at = perf_counter()
         try:
-            linked_raw_result = rag_client.get_linked_raw({"summary_hit_ids": summary_hit_ids, "top_k_per_hit": 1})
+            linked_raw_result = rag_client.get_linked_raw(
+                {"summary_hit_ids": summary_hit_ids, "top_k_per_hit": LINKED_RAW_TOP_K_PER_HIT}
+            )
         except httpx.HTTPError as exc:
             raise HTTPException(
                 status_code=503,
@@ -188,7 +221,7 @@ def run_chat(request: ChatRequest) -> ChatResponse:
         debug.tool_calls.append(
             ToolCallDebug(
                 tool_name="get_linked_original_text",
-                arguments={"summary_hit_ids": summary_hit_ids, "top_k_per_hit": 1},
+                arguments={"summary_hit_ids": summary_hit_ids, "top_k_per_hit": LINKED_RAW_TOP_K_PER_HIT},
                 result_count=len(linked_raw_result.get("hits", [])),
             )
         )
@@ -197,7 +230,9 @@ def run_chat(request: ChatRequest) -> ChatResponse:
     if _needs_direct_raw_search(summary_result, linked_raw_result):
         try:
             if include_timing:
-                raw_result, raw_timings = rag_client.search_raw_with_timings({"query": request.message, "top_k": 3})
+                raw_result, raw_timings = rag_client.search_raw_with_timings(
+                    {"query": request.message, "top_k": RAW_TOP_K}
+                )
                 debug.step_timings.append(
                     ChatStepTiming(step="search_original_text_embed_query", elapsed_ms=raw_timings["embedding_ms"])
                 )
@@ -205,14 +240,14 @@ def run_chat(request: ChatRequest) -> ChatResponse:
                     ChatStepTiming(step="search_original_text_rag_api", elapsed_ms=raw_timings["rag_api_ms"])
                 )
             else:
-                raw_result = rag_client.search_raw({"query": request.message, "top_k": 3})
+                raw_result = rag_client.search_raw({"query": request.message, "top_k": RAW_TOP_K})
         except httpx.HTTPError as exc:
             raise HTTPException(status_code=503, detail=f"rag-api request failed during search_original_text: {exc}") from exc
         all_citations.extend(_collect_citations(raw_result))
         debug.tool_calls.append(
             ToolCallDebug(
                 tool_name="search_original_text",
-                arguments={"query": request.message, "top_k": 3},
+                arguments={"query": request.message, "top_k": RAW_TOP_K},
                 result_count=len(raw_result.get("hits", [])),
             )
         )
@@ -228,9 +263,10 @@ def run_chat(request: ChatRequest) -> ChatResponse:
     _record_step_timing(debug, "final_generation", step_started_at, enabled=include_timing)
 
     message = extract_message(payload)
-    deduped_citations = _dedupe_citations(all_citations)
-    debug.unique_citation_count = len(deduped_citations)
+    ranked_citations = _sort_citations(_dedupe_citations(all_citations))
+    trimmed_citations = ranked_citations[:MAX_RETURNED_CITATIONS]
+    debug.unique_citation_count = len(ranked_citations)
     debug.completed_without_tool_call = False
     if include_timing:
         debug.elapsed_ms = round((perf_counter() - started_at) * 1000, 2)
-    return ChatResponse(answer=message.get("content", ""), citations=deduped_citations, debug=debug)
+    return ChatResponse(answer=message.get("content", ""), citations=trimmed_citations, debug=debug)

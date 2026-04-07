@@ -61,6 +61,9 @@ class OllamaProvider(LLMProvider):
             "messages": messages,
             "stream": False,
             "keep_alive": self._settings.ollama_keep_alive,
+            "options": {
+                "num_predict": self._settings.ollama_num_predict,
+            },
         }
         if tools is not None:
             payload["tools"] = tools

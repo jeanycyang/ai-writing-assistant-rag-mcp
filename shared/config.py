@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     ollama_request_timeout: float = 120.0
     ollama_health_timeout: float = 5.0
     ollama_keep_alive: str = "0s"
+    ollama_num_predict: int = 160
 
     embedding_provider: str = "sentence_transformers"
     embedding_model: str = "BAAI/bge-m3"
