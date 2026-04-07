@@ -73,6 +73,7 @@ def search_summaries(session: Session, request: SummarySearchRequest) -> Summary
     repo = RagRepository(session)
     rows = repo.search_summaries(
         query_embedding,
+        query=request.query,
         chapter_id=request.chapter_id,
         timeline_layer=request.timeline_layer,
         character=request.character,

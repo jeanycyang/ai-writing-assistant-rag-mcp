@@ -100,14 +100,18 @@ def build_summary_embedding_text(
     paragraph_id: int,
     data: dict[str, object],
 ) -> str:
+    characters = normalize_list(str(data["characters"]))
+    mentioned_characters = normalize_list(str(data["mentioned_characters"]))
+    mentioned_not_present = [item for item in mentioned_characters if item not in characters]
     key_events = data["key_events"] if isinstance(data["key_events"], list) else normalize_list(str(data["key_events"]))
     parts = [
         f"chapter_id: {chapter_id}",
         f"paragraph_id: {paragraph_id}",
         f"timeline_layer: {data['timeline_layer']}",
         f"scene: {data['scene']}",
-        f"characters: {', '.join(normalize_list(str(data['characters'])))}",
-        f"mentioned_characters: {', '.join(normalize_list(str(data['mentioned_characters'])))}",
+        f"characters: {', '.join(characters)}",
+        f"mentioned_characters: {', '.join(mentioned_characters)}",
+        f"mentioned_but_not_present: {', '.join(mentioned_not_present)}",
         f"tags: {', '.join(normalize_list(str(data['tags'])))}",
         f"key_events: {', '.join(key_events)}",
         f"plot: {data['plot']}",

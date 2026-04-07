@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from uuid import UUID
 
 from sqlalchemy import Select, select
@@ -8,6 +9,12 @@ from sqlalchemy.orm import Session
 
 from shared.models import RawChunk, SummaryChunk
 from shared.parsing import ParsedRawChunkRecord, ParsedSummaryRecord
+
+QUERY_FLAG_HINTS = {
+    "mention": ("提到", "提及", "聽見", "傳聞", "mentioned"),
+    "not_present": ("沒出現", "未出現", "尚未現身", "不在場", "還沒出現", "未登場", "not yet present"),
+    "first": ("第一次", "最早", "先", "首先", "first"),
+}
 
 
 def _summary_query_filters(
@@ -33,6 +40,57 @@ def _summary_query_filters(
     if tags:
         stmt = stmt.where(SummaryChunk.tags.overlap(tags))
     return stmt
+
+
+def _normalize_query_text(query: str) -> str:
+    return re.sub(r"\s+", "", query)
+
+
+def _query_has_hint(query: str, hint_group: str) -> bool:
+    normalized = _normalize_query_text(query)
+    return any(hint in normalized for hint in QUERY_FLAG_HINTS[hint_group])
+
+
+def _candidate_text(row: SummaryChunk) -> str:
+    return " ".join(
+        [
+            row.scene,
+            row.plot,
+            " ".join(row.characters),
+            " ".join(row.mentioned_characters),
+            " ".join(row.tags),
+            " ".join(row.key_events),
+        ]
+    )
+
+
+def _rerank_summary_score(query: str, row: SummaryChunk, semantic_score: float) -> float:
+    score = semantic_score
+    normalized_query = _normalize_query_text(query)
+    candidate_text = _candidate_text(row)
+    mentioned_not_present = [item for item in row.mentioned_characters if item not in row.characters]
+
+    if _query_has_hint(query, "mention") and mentioned_not_present:
+        score += 0.03
+    if _query_has_hint(query, "not_present") and mentioned_not_present:
+        score += 0.08
+    if _query_has_hint(query, "first") and mentioned_not_present:
+        score += 0.04
+        score += 0.02 / max(row.paragraph_id, 1)
+
+    if _query_has_hint(query, "not_present") and any(
+        phrase in candidate_text for phrase in ("尚未現身", "未現身", "未出現", "未登場")
+    ):
+        score += 0.06
+
+    for name in mentioned_not_present:
+        if name and name in normalized_query:
+            score += 0.06
+    for name in row.characters:
+        if name and name in normalized_query:
+            score += 0.02
+
+    return score
 
 
 class RagRepository:
@@ -126,6 +184,7 @@ class RagRepository:
         self,
         query_embedding: list[float],
         *,
+        query: str,
         chapter_id: str | None,
         timeline_layer: str | None,
         character: str | None,
@@ -145,8 +204,14 @@ class RagRepository:
             min_priority_score=min_priority_score,
             tags=tags,
         )
-        stmt = stmt.order_by(distance).limit(top_k)
-        return [(row[0], float(row[1])) for row in self.session.execute(stmt).all()]
+        stmt = stmt.order_by(distance).limit(max(top_k * 5, top_k))
+        candidates = [(row[0], float(row[1])) for row in self.session.execute(stmt).all()]
+        reranked = [
+            (row, _rerank_summary_score(query, row, semantic_score))
+            for row, semantic_score in candidates
+        ]
+        reranked.sort(key=lambda item: item[1], reverse=True)
+        return reranked[:top_k]
 
     def search_raw(
         self,
