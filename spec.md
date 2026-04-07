@@ -122,6 +122,16 @@ user query
   -> user
 ```
 
+Current implementation note:
+
+- the original model-driven multi-turn tool loop in `/chat` was replaced
+- `/chat` now uses a deterministic summary-first retrieval pipeline:
+  1. `search_episode_summaries`
+  2. `get_linked_original_text`
+  3. optional `search_original_text` fallback
+  4. one final Ollama generation call with retrieved context
+- this change was made because the earlier loop was unstable and too CPU-expensive in local use
+
 Implement these components:
 
 1. `postgres`
@@ -146,9 +156,29 @@ Implement these components:
    * FastAPI service
    * talks to local Ollama over HTTP on host machine
    * exposes a simple chat endpoint
-   * handles model tool calls
-   * when model requests retrieval tools, this service calls `rag-api`
-   * loops until final answer is produced
+   * owns retrieval orchestration for `/chat`
+   * calls `rag-api` directly in a deterministic summary-first order
+   * then performs one final model call to produce the answer
+
+Current `/chat` debug contract:
+
+* request supports `include_timing: true`
+* response debug includes:
+  * `elapsed_ms`
+  * `step_timings`
+  * tool-call style retrieval trace for the deterministic steps
+
+Current performance finding:
+
+* `search_episode_summaries` is the dominant slow step on first call
+* that timing currently includes local query embedding generation in `agent-api`
+* the likely dominant cost is embedding model cold start (`sentence-transformers` / `BAAI/bge-m3`)
+* linked raw retrieval is comparatively fast
+
+Next optimization target:
+
+* optimize `search_episode_summaries`
+* specifically separate embedding time from retrieval time and reduce embedding cold-start cost
 
 4. local file-based ingestion script
 

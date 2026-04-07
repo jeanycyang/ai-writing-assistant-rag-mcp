@@ -16,7 +16,13 @@ class LLMProvider(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def complete(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
+    def complete(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        tools: list[dict[str, Any]] | None = None,
+        think: bool | str | None = None,
+    ) -> dict[str, Any]:
         raise NotImplementedError
 
     @abstractmethod
@@ -43,15 +49,26 @@ class OllamaProvider(LLMProvider):
             for spec in TOOL_SPECS
         ]
 
-    def complete(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
+    def complete(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        tools: list[dict[str, Any]] | None = None,
+        think: bool | str | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "model": self._settings.ollama_model,
+            "messages": messages,
+            "stream": False,
+            "keep_alive": self._settings.ollama_keep_alive,
+        }
+        if tools is not None:
+            payload["tools"] = tools
+        if think is not None:
+            payload["think"] = think
         response = self._client.post(
             f"{self._settings.ollama_base_url}/api/chat",
-            json={
-                "model": self._settings.ollama_model,
-                "messages": messages,
-                "tools": self.build_tool_definitions(),
-                "stream": False,
-            },
+            json=payload,
         )
         response.raise_for_status()
         return response.json()
@@ -61,11 +78,13 @@ class OllamaProvider(LLMProvider):
         response.raise_for_status()
         payload = response.json()
         model_names = [model.get("name", "") for model in payload.get("models", [])]
+        configured_model = self._settings.ollama_model
+        model_available = configured_model in model_names or f"{configured_model}:latest" in model_names
         return {
             "status": "ok",
             "base_url": self._settings.ollama_base_url,
-            "model_configured": self._settings.ollama_model,
-            "model_available": self._settings.ollama_model in model_names,
+            "model_configured": configured_model,
+            "model_available": model_available,
         }
 
 

@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     ollama_model: str = "hauhau-gemma4-e4b-q4km"
     ollama_request_timeout: float = 120.0
     ollama_health_timeout: float = 5.0
+    ollama_keep_alive: str = "0s"
 
     embedding_provider: str = "sentence_transformers"
     embedding_model: str = "BAAI/bge-m3"

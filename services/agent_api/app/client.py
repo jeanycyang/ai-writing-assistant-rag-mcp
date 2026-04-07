@@ -12,15 +12,55 @@ class RagApiClient:
     def __init__(self) -> None:
         self._settings = get_settings()
         self._client = httpx.Client(base_url=self._settings.rag_api_url, timeout=60.0)
-        self._embedding_provider = get_embedding_provider()
+        self._embedding_provider = None
+
+    def _get_embedding_provider(self):
+        if self._embedding_provider is None:
+            self._embedding_provider = get_embedding_provider()
+        return self._embedding_provider
 
     def _with_query_embedding(self, payload: dict[str, Any]) -> dict[str, Any]:
         query = payload.get("query")
         if not isinstance(query, str):
             raise ValueError("Expected string query for vectorized rag-api request")
         enriched = dict(payload)
-        enriched["query_embedding"] = self._embedding_provider.embed_text(query)
+        enriched["query_embedding"] = self._get_embedding_provider().embed_text(query)
         return enriched
+
+    def _normalize_linked_raw_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        summary_hit_ids: list[str] = []
+        raw_summary_hit_ids = payload.get("summary_hit_ids", [])
+        if not raw_summary_hit_ids:
+            for alternate_key in ("summary_hits", "hits", "summaries"):
+                alternate_value = payload.get(alternate_key)
+                if alternate_value:
+                    raw_summary_hit_ids = alternate_value
+                    break
+
+        if isinstance(raw_summary_hit_ids, str):
+            raw_summary_hit_ids = [raw_summary_hit_ids]
+        elif isinstance(raw_summary_hit_ids, dict):
+            raw_summary_hit_ids = [raw_summary_hit_ids]
+        elif not isinstance(raw_summary_hit_ids, list):
+            raw_summary_hit_ids = []
+
+        for item in raw_summary_hit_ids:
+            if isinstance(item, str):
+                summary_hit_ids.append(item)
+            elif isinstance(item, dict):
+                for key in ("id", "summary_id", "summary_hit_id"):
+                    value = item.get(key)
+                    if isinstance(value, str):
+                        summary_hit_ids.append(value)
+                        break
+
+        normalized = {"summary_hit_ids": summary_hit_ids}
+        top_k_per_hit = payload.get("top_k_per_hit")
+        if top_k_per_hit is None:
+            top_k_per_hit = payload.get("top_k")
+        if top_k_per_hit is not None:
+            normalized["top_k_per_hit"] = top_k_per_hit
+        return normalized
 
     def search_summaries(self, payload: dict[str, Any]) -> dict[str, Any]:
         response = self._client.post("/search/summaries", json=self._with_query_embedding(payload))
@@ -28,7 +68,7 @@ class RagApiClient:
         return response.json()
 
     def get_linked_raw(self, payload: dict[str, Any]) -> dict[str, Any]:
-        response = self._client.post("/retrieve/linked-raw", json=payload)
+        response = self._client.post("/retrieve/linked-raw", json=self._normalize_linked_raw_payload(payload))
         response.raise_for_status()
         return response.json()
 

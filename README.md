@@ -17,6 +17,15 @@ The retrieval policy is summary-first:
 
 This keeps canon lookup compact and fast while still allowing fallback to scene-level wording and nuance.
 
+Current `agent-api /chat` behavior:
+
+1. deterministically call `search_episode_summaries`
+2. deterministically call `get_linked_original_text` for the returned summary hits
+3. fall back to `search_original_text` only if summary evidence or linked raw evidence is missing
+4. make one final Ollama generation call with the retrieved context
+
+The earlier model-driven multi-turn tool loop was removed from `/chat` because it was unstable and too expensive on local hardware.
+
 ## Python Setup
 
 Use the project virtual environment for every local Python command.
@@ -67,6 +76,15 @@ Startup order:
 2. `rag-api` runs migrations and starts
 3. `agent-api` starts after `rag-api` is healthy
 
+Health semantics:
+
+- `/healthz` means the API process is up
+- `/readyz` means the service and its dependencies are actually usable
+- `rag-api /readyz` checks PostgreSQL connectivity
+- `agent-api /readyz` checks both `rag-api` and Ollama, and also verifies that the configured `OLLAMA_MODEL` is available
+
+This means `agent-api` can be live but not ready if Ollama is down or the configured model has not been pulled yet.
+
 ## Ingest Data
 
 Sample data is included under [data/sample](/Users/jeanycyang/Documents/fanfiction-rag/data/sample).
@@ -97,11 +115,13 @@ Query embeddings are generated outside `rag-api`. In the current implementation,
 - `POST /search/raw`
 - `POST /retrieve/linked-raw`
 - `GET /healthz`
+- `GET /readyz`
 
 `agent-api`
 
 - `POST /chat`
 - `GET /healthz`
+- `GET /readyz`
 
 Both APIs use explicit Pydantic request/response models and standardized citations containing chapter, paragraph, chunk, source path, and score metadata.
 
@@ -115,10 +135,60 @@ curl -X POST http://localhost:8002/chat \
   }'
 ```
 
+If you want timing/debug profiling in the response:
+
+```bash
+curl -X POST http://localhost:8002/chat \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "message": "任隊長第一次被提到、但人還沒出現，是在哪一段？",
+    "include_timing": true
+  }'
+```
+
+When `include_timing` is enabled, the response includes:
+
+- `debug.elapsed_ms`: total `/chat` time
+- `debug.step_timings`: per-step timings for:
+  - `search_episode_summaries`
+  - `get_linked_original_text`
+  - `search_original_text` when fallback is used
+  - `final_generation`
+
+Current profiling finding:
+
+- the first-call bottleneck is `search_episode_summaries`
+- that timing bucket currently includes query embedding generation inside `agent-api`
+- the most likely dominant cost is cold-start loading of the local embedding model (`sentence-transformers` + `BAAI/bge-m3`), not PostgreSQL retrieval itself
+- `get_linked_original_text` is fast in comparison, so raw linked retrieval is not the current hotspot
+
 Other example prompts:
 
 - `任隊長和林妍公開對峙之前，先發生了什麼事？`
 - `把這段摘要背後對應的原文也找出來。`
+
+## Health Checks
+
+Check liveness:
+
+```bash
+curl -s http://localhost:8001/healthz
+curl -s http://localhost:8002/healthz
+```
+
+Check readiness:
+
+```bash
+curl -s http://localhost:8001/readyz
+curl -s http://localhost:8002/readyz
+```
+
+Typical `agent-api /readyz` outcomes:
+
+- `status: ok`: `rag-api` is reachable and the configured Ollama model is available
+- `status: degraded`: `rag-api` is down, Ollama is down, or the configured model is missing
+
+If `model_available` is `false`, pull or switch the model before expecting `/chat` to work.
 
 ## Testing
 

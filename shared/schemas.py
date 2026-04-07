@@ -90,6 +90,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     history: list[ChatMessage] = Field(default_factory=list)
+    include_timing: bool = False
 
 
 class ToolCallDebug(BaseModel):
@@ -98,12 +99,19 @@ class ToolCallDebug(BaseModel):
     result_count: int
 
 
+class ChatStepTiming(BaseModel):
+    step: str
+    elapsed_ms: float
+
+
 class ChatDebugInfo(BaseModel):
     provider: str
     model: str
     iterations: int = 0
     unique_citation_count: int = 0
     completed_without_tool_call: bool = False
+    elapsed_ms: float | None = None
+    step_timings: list[ChatStepTiming] = Field(default_factory=list)
     tool_calls: list[ToolCallDebug] = Field(default_factory=list)
 
 
