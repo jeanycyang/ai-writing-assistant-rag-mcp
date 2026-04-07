@@ -45,7 +45,8 @@ class RawHit(BaseModel):
 
 
 class SummarySearchRequest(BaseModel):
-    query: str
+    query: str | None = None
+    query_embedding: list[float]
     chapter_id: str | None = None
     timeline_layer: str | None = None
     character: str | None = None
@@ -60,7 +61,8 @@ class SummarySearchResponse(BaseModel):
 
 
 class RawSearchRequest(BaseModel):
-    query: str
+    query: str | None = None
+    query_embedding: list[float]
     chapter_id: str | None = None
     paragraph_id: int | None = None
     tags: list[str] = Field(default_factory=list)

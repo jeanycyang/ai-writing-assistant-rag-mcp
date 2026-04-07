@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from shared.embeddings import get_embedding_provider
 from shared.repository import RagRepository
 from shared.schemas import (
     Citation,
@@ -68,12 +67,10 @@ def _build_raw_hit(row, score: float) -> RawHit:
 
 
 def search_summaries(session: Session, request: SummarySearchRequest) -> SummarySearchResponse:
-    embedding_provider = get_embedding_provider()
-    query_embedding = embedding_provider.embed_text(request.query)
     repo = RagRepository(session)
     rows = repo.search_summaries(
-        query_embedding,
-        query=request.query,
+        request.query_embedding,
+        query=request.query or "",
         chapter_id=request.chapter_id,
         timeline_layer=request.timeline_layer,
         character=request.character,
@@ -86,11 +83,9 @@ def search_summaries(session: Session, request: SummarySearchRequest) -> Summary
 
 
 def search_raw(session: Session, request: RawSearchRequest) -> RawSearchResponse:
-    embedding_provider = get_embedding_provider()
-    query_embedding = embedding_provider.embed_text(request.query)
     repo = RagRepository(session)
     rows = repo.search_raw(
-        query_embedding,
+        request.query_embedding,
         chapter_id=request.chapter_id,
         paragraph_id=request.paragraph_id,
         top_k=request.top_k,

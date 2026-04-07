@@ -35,6 +35,7 @@ class FakeProvider:
 
 class FakeRagClient:
     def search_summaries(self, payload: dict[str, Any]) -> dict[str, Any]:
+        assert payload["query"] == "任隊長第一次被提到是在哪裡？"
         return {
             "hits": [
                 {

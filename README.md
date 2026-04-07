@@ -87,6 +87,8 @@ The ingestion pipeline:
 
 Default embedding choice: `BAAI/bge-m3`. It is multilingual and practical for Traditional Chinese (Taiwan) text on a Mac-centric local setup. The embedding layer is abstracted so a different provider can be added later without changing the retrieval API.
 
+Query embeddings are generated outside `rag-api`. In the current implementation, `agent-api` computes query embeddings and sends them to `rag-api`, so `rag-api` stays retrieval-only and does not depend on PyTorch.
+
 ## API Overview
 
 `rag-api`
