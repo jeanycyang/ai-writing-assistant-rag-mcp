@@ -38,6 +38,30 @@ def _collect_citations(result: dict[str, Any]) -> list[Citation]:
     return citations
 
 
+def _citation_key(citation: Citation) -> tuple[Any, ...]:
+    return (
+        str(citation.summary_id) if citation.summary_id else None,
+        str(citation.raw_chunk_id) if citation.raw_chunk_id else None,
+        citation.chapter_id,
+        citation.paragraph_id,
+        citation.chunk_id,
+        citation.source_path,
+        citation.citation_type,
+    )
+
+
+def _dedupe_citations(citations: list[Citation]) -> list[Citation]:
+    seen: set[tuple[Any, ...]] = set()
+    deduped: list[Citation] = []
+    for citation in citations:
+        key = _citation_key(citation)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(citation)
+    return deduped
+
+
 def run_chat(request: ChatRequest) -> ChatResponse:
     settings = get_settings()
     provider = get_llm_provider()
@@ -60,7 +84,7 @@ def run_chat(request: ChatRequest) -> ChatResponse:
         tool_calls = extract_tool_calls(message)
         if not tool_calls:
             answer = message.get("content", "")
-            return ChatResponse(answer=answer, citations=all_citations, debug=debug)
+            return ChatResponse(answer=answer, citations=_dedupe_citations(all_citations), debug=debug)
 
         messages.append(
             {
@@ -81,7 +105,7 @@ def run_chat(request: ChatRequest) -> ChatResponse:
                 elif tool_name == "search_original_text":
                     result = rag_client.search_raw(arguments)
                 else:
-                    raise ValueError(f"Unsupported tool call: {tool_name}")
+                    raise HTTPException(status_code=502, detail=f"Unsupported tool call from model: {tool_name}")
             except httpx.HTTPError as exc:
                 raise HTTPException(status_code=503, detail=f"rag-api request failed during {tool_name}: {exc}") from exc
 
@@ -101,4 +125,4 @@ def run_chat(request: ChatRequest) -> ChatResponse:
                 }
             )
 
-    raise RuntimeError("Model did not return a final answer within the tool loop limit")
+    raise HTTPException(status_code=502, detail="Model did not return a final answer within the tool loop limit")
