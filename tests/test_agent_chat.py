@@ -1,5 +1,8 @@
 from typing import Any
 
+import httpx
+import pytest
+
 from services.agent_api.app import chat
 from shared.schemas import ChatRequest
 
@@ -67,3 +70,23 @@ def test_run_chat_uses_summary_search_first(monkeypatch) -> None:
     assert "先被提到" in response.answer
     assert response.debug.tool_calls[0].tool_name == "search_episode_summaries"
     assert response.citations[0].chapter_id == "episode_01"
+
+
+def test_run_chat_returns_503_when_rag_api_fails(monkeypatch) -> None:
+    class FailingRagClient:
+        def search_summaries(self, payload: dict[str, Any]) -> dict[str, Any]:
+            raise httpx.ConnectError("rag down")
+
+        def get_linked_raw(self, payload: dict[str, Any]) -> dict[str, Any]:
+            raise AssertionError("not expected")
+
+        def search_raw(self, payload: dict[str, Any]) -> dict[str, Any]:
+            raise AssertionError("not expected")
+
+    monkeypatch.setattr(chat, "get_llm_provider", lambda: FakeProvider())
+    monkeypatch.setattr(chat, "RagApiClient", FailingRagClient)
+
+    with pytest.raises(Exception) as exc_info:
+        chat.run_chat(ChatRequest(message="任隊長第一次被提到是在哪裡？"))
+
+    assert "rag-api request failed" in str(exc_info.value)

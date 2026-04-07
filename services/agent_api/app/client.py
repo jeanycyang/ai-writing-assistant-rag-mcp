@@ -36,3 +36,12 @@ class RagApiClient:
         response = self._client.post("/search/raw", json=self._with_query_embedding(payload))
         response.raise_for_status()
         return response.json()
+
+    def healthcheck(self) -> dict[str, Any]:
+        response = self._client.get("/healthz")
+        response.raise_for_status()
+        payload = response.json()
+        return {
+            "status": payload.get("status", "ok"),
+            "base_url": self._settings.rag_api_url,
+        }

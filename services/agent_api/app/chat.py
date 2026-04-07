@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import httpx
+from fastapi import HTTPException
+
 from services.agent_api.app.client import RagApiClient
 from services.agent_api.app.provider import extract_message, extract_tool_calls, get_llm_provider
 from shared.config import get_settings
@@ -49,7 +52,10 @@ def run_chat(request: ChatRequest) -> ChatResponse:
     debug = ChatDebugInfo(provider=settings.llm_provider, model=settings.ollama_model, tool_calls=[])
 
     for _ in range(8):
-        payload = provider.complete(messages)
+        try:
+            payload = provider.complete(messages)
+        except httpx.HTTPError as exc:
+            raise HTTPException(status_code=503, detail=f"LLM provider request failed: {exc}") from exc
         message = extract_message(payload)
         tool_calls = extract_tool_calls(message)
         if not tool_calls:
@@ -67,14 +73,17 @@ def run_chat(request: ChatRequest) -> ChatResponse:
         for tool_call in tool_calls:
             tool_name = tool_call["name"]
             arguments = tool_call["arguments"]
-            if tool_name == "search_episode_summaries":
-                result = rag_client.search_summaries(arguments)
-            elif tool_name == "get_linked_original_text":
-                result = rag_client.get_linked_raw(arguments)
-            elif tool_name == "search_original_text":
-                result = rag_client.search_raw(arguments)
-            else:
-                raise ValueError(f"Unsupported tool call: {tool_name}")
+            try:
+                if tool_name == "search_episode_summaries":
+                    result = rag_client.search_summaries(arguments)
+                elif tool_name == "get_linked_original_text":
+                    result = rag_client.get_linked_raw(arguments)
+                elif tool_name == "search_original_text":
+                    result = rag_client.search_raw(arguments)
+                else:
+                    raise ValueError(f"Unsupported tool call: {tool_name}")
+            except httpx.HTTPError as exc:
+                raise HTTPException(status_code=503, detail=f"rag-api request failed during {tool_name}: {exc}") from exc
 
             all_citations.extend(_collect_citations(result))
             debug.tool_calls.append(

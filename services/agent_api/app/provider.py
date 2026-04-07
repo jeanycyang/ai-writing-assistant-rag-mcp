@@ -19,6 +19,10 @@ class LLMProvider(ABC):
     def complete(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         raise NotImplementedError
 
+    @abstractmethod
+    def healthcheck(self) -> dict[str, Any]:
+        raise NotImplementedError
+
 
 class OllamaProvider(LLMProvider):
     def __init__(self, settings: Settings):
@@ -50,6 +54,18 @@ class OllamaProvider(LLMProvider):
         )
         response.raise_for_status()
         return response.json()
+
+    def healthcheck(self) -> dict[str, Any]:
+        response = self._client.get(f"{self._settings.ollama_base_url}/api/tags")
+        response.raise_for_status()
+        payload = response.json()
+        model_names = [model.get("name", "") for model in payload.get("models", [])]
+        return {
+            "status": "ok",
+            "base_url": self._settings.ollama_base_url,
+            "model_configured": self._settings.ollama_model,
+            "model_available": self._settings.ollama_model in model_names,
+        }
 
 
 def get_llm_provider() -> LLMProvider:
