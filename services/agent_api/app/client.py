@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from time import perf_counter
 from typing import Any
 
 import httpx
@@ -26,6 +27,20 @@ class RagApiClient:
         enriched = dict(payload)
         enriched["query_embedding"] = self._get_embedding_provider().embed_text(query)
         return enriched
+
+    def _vectorized_request(self, path: str, payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, float]]:
+        embedding_started_at = perf_counter()
+        enriched_payload = self._with_query_embedding(payload)
+        embedding_elapsed_ms = round((perf_counter() - embedding_started_at) * 1000, 2)
+
+        request_started_at = perf_counter()
+        response = self._client.post(path, json=enriched_payload)
+        response.raise_for_status()
+        request_elapsed_ms = round((perf_counter() - request_started_at) * 1000, 2)
+        return response.json(), {
+            "embedding_ms": embedding_elapsed_ms,
+            "rag_api_ms": request_elapsed_ms,
+        }
 
     def _normalize_linked_raw_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
         summary_hit_ids: list[str] = []
@@ -63,9 +78,11 @@ class RagApiClient:
         return normalized
 
     def search_summaries(self, payload: dict[str, Any]) -> dict[str, Any]:
-        response = self._client.post("/search/summaries", json=self._with_query_embedding(payload))
-        response.raise_for_status()
-        return response.json()
+        result, _ = self._vectorized_request("/search/summaries", payload)
+        return result
+
+    def search_summaries_with_timings(self, payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, float]]:
+        return self._vectorized_request("/search/summaries", payload)
 
     def get_linked_raw(self, payload: dict[str, Any]) -> dict[str, Any]:
         response = self._client.post("/retrieve/linked-raw", json=self._normalize_linked_raw_payload(payload))
@@ -73,9 +90,11 @@ class RagApiClient:
         return response.json()
 
     def search_raw(self, payload: dict[str, Any]) -> dict[str, Any]:
-        response = self._client.post("/search/raw", json=self._with_query_embedding(payload))
-        response.raise_for_status()
-        return response.json()
+        result, _ = self._vectorized_request("/search/raw", payload)
+        return result
+
+    def search_raw_with_timings(self, payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, float]]:
+        return self._vectorized_request("/search/raw", payload)
 
     def healthcheck(self) -> dict[str, Any]:
         response = self._client.get("/healthz")

@@ -25,6 +25,18 @@ def test_healthz_reports_process_up():
     assert payload["status"] == "ok"
 
 
+def test_startup_preloads_embedding_provider(monkeypatch):
+    called = {"value": False}
+
+    def fake_preload():
+        called["value"] = True
+
+    monkeypatch.setattr(main, "preload_embedding_provider", fake_preload)
+
+    main.startup()
+    assert called["value"] is True
+
+
 def test_readyz_reports_dependency_status(monkeypatch):
     monkeypatch.setattr(main, "RagApiClient", HealthyRagClient)
     monkeypatch.setattr(main, "get_llm_provider", lambda: HealthyProvider())

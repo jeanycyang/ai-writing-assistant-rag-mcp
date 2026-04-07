@@ -148,12 +148,21 @@ def run_chat(request: ChatRequest) -> ChatResponse:
 
     include_timing = request.include_timing
 
-    step_started_at = perf_counter()
     try:
-        summary_result = rag_client.search_summaries({"query": request.message, "top_k": 3})
+        if include_timing:
+            summary_result, summary_timings = rag_client.search_summaries_with_timings(
+                {"query": request.message, "top_k": 3}
+            )
+            debug.step_timings.append(
+                ChatStepTiming(step="search_episode_summaries_embed_query", elapsed_ms=summary_timings["embedding_ms"])
+            )
+            debug.step_timings.append(
+                ChatStepTiming(step="search_episode_summaries_rag_api", elapsed_ms=summary_timings["rag_api_ms"])
+            )
+        else:
+            summary_result = rag_client.search_summaries({"query": request.message, "top_k": 3})
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"rag-api request failed during search_episode_summaries: {exc}") from exc
-    _record_step_timing(debug, "search_episode_summaries", step_started_at, enabled=include_timing)
     all_citations.extend(_collect_citations(summary_result))
     debug.tool_calls.append(
         ToolCallDebug(
@@ -186,12 +195,19 @@ def run_chat(request: ChatRequest) -> ChatResponse:
 
     raw_result: dict[str, Any] = {"hits": []}
     if _needs_direct_raw_search(summary_result, linked_raw_result):
-        step_started_at = perf_counter()
         try:
-            raw_result = rag_client.search_raw({"query": request.message, "top_k": 3})
+            if include_timing:
+                raw_result, raw_timings = rag_client.search_raw_with_timings({"query": request.message, "top_k": 3})
+                debug.step_timings.append(
+                    ChatStepTiming(step="search_original_text_embed_query", elapsed_ms=raw_timings["embedding_ms"])
+                )
+                debug.step_timings.append(
+                    ChatStepTiming(step="search_original_text_rag_api", elapsed_ms=raw_timings["rag_api_ms"])
+                )
+            else:
+                raw_result = rag_client.search_raw({"query": request.message, "top_k": 3})
         except httpx.HTTPError as exc:
             raise HTTPException(status_code=503, detail=f"rag-api request failed during search_original_text: {exc}") from exc
-        _record_step_timing(debug, "search_original_text", step_started_at, enabled=include_timing)
         all_citations.extend(_collect_citations(raw_result))
         debug.tool_calls.append(
             ToolCallDebug(

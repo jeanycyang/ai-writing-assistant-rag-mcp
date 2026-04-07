@@ -38,3 +38,7 @@ def get_embedding_provider() -> EmbeddingProvider:
     if settings.embedding_provider == "sentence_transformers":
         return SentenceTransformerEmbeddingProvider(settings)
     raise ValueError(f"Unsupported embedding provider: {settings.embedding_provider}")
+
+
+def preload_embedding_provider() -> EmbeddingProvider:
+    return get_embedding_provider()

@@ -4,9 +4,15 @@ from fastapi import FastAPI
 from services.agent_api.app.chat import run_chat
 from services.agent_api.app.client import RagApiClient
 from services.agent_api.app.provider import get_llm_provider
+from shared.embeddings import preload_embedding_provider
 from shared.schemas import ChatRequest, ChatResponse
 
 app = FastAPI(title="fanfiction-agent-api")
+
+
+@app.on_event("startup")
+def startup() -> None:
+    preload_embedding_provider()
 
 
 @app.get("/healthz")

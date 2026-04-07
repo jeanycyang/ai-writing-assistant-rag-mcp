@@ -80,6 +80,12 @@ class FakeRagClient:
     def search_raw(self, payload: dict[str, Any]) -> dict[str, Any]:
         raise AssertionError("Should not call raw search in this test")
 
+    def search_summaries_with_timings(self, payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, float]]:
+        return self.search_summaries(payload), {"embedding_ms": 12.5, "rag_api_ms": 7.25}
+
+    def search_raw_with_timings(self, payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, float]]:
+        return self.search_raw(payload), {"embedding_ms": 10.0, "rag_api_ms": 5.0}
+
 
 def test_run_chat_uses_deterministic_summary_first_pipeline(monkeypatch) -> None:
     monkeypatch.setattr(chat, "get_llm_provider", lambda: FakeProvider())
@@ -107,7 +113,8 @@ def test_run_chat_includes_elapsed_ms_when_requested(monkeypatch) -> None:
     assert response.debug.elapsed_ms is not None
     assert response.debug.elapsed_ms >= 0
     assert [timing.step for timing in response.debug.step_timings] == [
-        "search_episode_summaries",
+        "search_episode_summaries_embed_query",
+        "search_episode_summaries_rag_api",
         "get_linked_original_text",
         "final_generation",
     ]
@@ -118,6 +125,9 @@ def test_run_chat_falls_back_to_raw_search(monkeypatch) -> None:
     class RawFallbackRagClient:
         def search_summaries(self, payload: dict[str, Any]) -> dict[str, Any]:
             return {"hits": []}
+
+        def search_summaries_with_timings(self, payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, float]]:
+            return self.search_summaries(payload), {"embedding_ms": 11.0, "rag_api_ms": 6.0}
 
         def get_linked_raw(self, payload: dict[str, Any]) -> dict[str, Any]:
             raise AssertionError("not expected")
@@ -145,6 +155,9 @@ def test_run_chat_falls_back_to_raw_search(monkeypatch) -> None:
                 ]
             }
 
+        def search_raw_with_timings(self, payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, float]]:
+            return self.search_raw(payload), {"embedding_ms": 13.0, "rag_api_ms": 4.0}
+
     monkeypatch.setattr(chat, "get_llm_provider", lambda: FakeProvider())
     monkeypatch.setattr(chat, "RagApiClient", RawFallbackRagClient)
 
@@ -158,6 +171,9 @@ def test_run_chat_includes_raw_search_timing_when_used(monkeypatch) -> None:
     class RawFallbackRagClient:
         def search_summaries(self, payload: dict[str, Any]) -> dict[str, Any]:
             return {"hits": []}
+
+        def search_summaries_with_timings(self, payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, float]]:
+            return self.search_summaries(payload), {"embedding_ms": 11.0, "rag_api_ms": 6.0}
 
         def get_linked_raw(self, payload: dict[str, Any]) -> dict[str, Any]:
             raise AssertionError("not expected")
@@ -181,8 +197,11 @@ def test_run_chat_includes_raw_search_timing_when_used(monkeypatch) -> None:
                             "citation_type": "raw",
                         },
                     }
-                ]
-            }
+                    ]
+                }
+
+        def search_raw_with_timings(self, payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, float]]:
+            return self.search_raw(payload), {"embedding_ms": 13.0, "rag_api_ms": 4.0}
 
     monkeypatch.setattr(chat, "get_llm_provider", lambda: FakeProvider())
     monkeypatch.setattr(chat, "RagApiClient", RawFallbackRagClient)
@@ -190,8 +209,10 @@ def test_run_chat_includes_raw_search_timing_when_used(monkeypatch) -> None:
     response = chat.run_chat(ChatRequest(message="任隊長第一次被提到是在哪裡？", include_timing=True))
 
     assert [timing.step for timing in response.debug.step_timings] == [
-        "search_episode_summaries",
-        "search_original_text",
+        "search_episode_summaries_embed_query",
+        "search_episode_summaries_rag_api",
+        "search_original_text_embed_query",
+        "search_original_text_rag_api",
         "final_generation",
     ]
 
