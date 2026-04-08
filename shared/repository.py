@@ -271,3 +271,22 @@ class RagRepository:
             for item in grouped.get(summary_id, [])[:top_k_per_hit]:
                 results.append((item, priority_lookup.get(summary_id, 0.0)))
         return results
+
+    def get_summary_paragraph(self, *, chapter_id: str, paragraph_id: int) -> list[tuple[SummaryChunk, float]]:
+        stmt = (
+            select(SummaryChunk)
+            .where(SummaryChunk.chapter_id == chapter_id)
+            .where(SummaryChunk.paragraph_id == paragraph_id)
+        )
+        rows = self.session.execute(stmt).scalars().all()
+        return [(row, 1.0) for row in rows]
+
+    def get_raw_paragraph(self, *, chapter_id: str, paragraph_id: int) -> list[tuple[RawChunk, float]]:
+        stmt = (
+            select(RawChunk)
+            .where(RawChunk.chapter_id == chapter_id)
+            .where(RawChunk.paragraph_id == paragraph_id)
+            .order_by(RawChunk.chunk_id)
+        )
+        rows = self.session.execute(stmt).scalars().all()
+        return [(row, 1.0) for row in rows]

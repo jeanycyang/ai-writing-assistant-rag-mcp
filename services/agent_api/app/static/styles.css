@@ -161,6 +161,25 @@ body {
   font-size: 0.84rem;
 }
 
+.assistant-actions {
+  margin-top: 10px;
+}
+
+.copy-response-button {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: rgba(255, 250, 242, 0.9);
+  color: var(--accent-strong);
+  font: inherit;
+  cursor: pointer;
+}
+
+.copy-response-button:hover {
+  border-color: var(--accent);
+  background: #fff7f0;
+}
+
 .assistant-extras {
   margin-top: 10px;
 }
@@ -174,6 +193,7 @@ body {
   color: var(--accent-strong);
 }
 
+.prompt-block,
 .citations,
 .debug-block {
   margin-top: 8px;

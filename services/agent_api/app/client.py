@@ -89,6 +89,28 @@ class RagApiClient:
         response.raise_for_status()
         return response.json()
 
+    def get_summary_paragraph(self, payload: dict[str, Any]) -> dict[str, Any]:
+        response = self._client.post(
+            "/retrieve/summary-paragraph",
+            json={
+                "chapter_id": payload["chapter_id"],
+                "paragraph_id": payload["paragraph_id"],
+            },
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def get_raw_paragraph(self, payload: dict[str, Any]) -> dict[str, Any]:
+        response = self._client.post(
+            "/retrieve/raw-paragraph",
+            json={
+                "chapter_id": payload["chapter_id"],
+                "paragraph_id": payload["paragraph_id"],
+            },
+        )
+        response.raise_for_status()
+        return response.json()
+
     def search_raw(self, payload: dict[str, Any]) -> dict[str, Any]:
         result, _ = self._vectorized_request("/search/raw", payload)
         return result

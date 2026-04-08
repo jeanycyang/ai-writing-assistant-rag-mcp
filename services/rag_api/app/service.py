@@ -6,9 +6,13 @@ from shared.repository import RagRepository
 from shared.schemas import (
     Citation,
     LinkedRawResponse,
+    RawParagraphRequest,
+    RawParagraphResponse,
     RawHit,
     RawSearchRequest,
     RawSearchResponse,
+    SummaryParagraphRequest,
+    SummaryParagraphResponse,
     SummaryHit,
     SummarySearchRequest,
     SummarySearchResponse,
@@ -97,3 +101,15 @@ def get_linked_raw(session: Session, summary_hit_ids, top_k_per_hit: int) -> Lin
     repo = RagRepository(session)
     rows = repo.get_linked_raw(summary_hit_ids, top_k_per_hit)
     return LinkedRawResponse(hits=[_build_raw_hit(row, score) for row, score in rows])
+
+
+def get_summary_paragraph(session: Session, request: SummaryParagraphRequest) -> SummaryParagraphResponse:
+    repo = RagRepository(session)
+    rows = repo.get_summary_paragraph(chapter_id=request.chapter_id, paragraph_id=request.paragraph_id)
+    return SummaryParagraphResponse(hits=[_build_summary_hit(row, score) for row, score in rows])
+
+
+def get_raw_paragraph(session: Session, request: RawParagraphRequest) -> RawParagraphResponse:
+    repo = RagRepository(session)
+    rows = repo.get_raw_paragraph(chapter_id=request.chapter_id, paragraph_id=request.paragraph_id)
+    return RawParagraphResponse(hits=[_build_raw_hit(row, score) for row, score in rows])

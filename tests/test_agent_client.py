@@ -37,3 +37,55 @@ def test_normalize_linked_raw_payload_accepts_alternate_hit_keys() -> None:
         "summary_hit_ids": ["33333333-3333-3333-3333-333333333333"],
         "top_k_per_hit": 2,
     }
+
+
+def test_get_raw_paragraph_posts_exact_metadata_lookup() -> None:
+    client = RagApiClient()
+    captured: dict = {}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"hits": []}
+
+    class FakeHttpClient:
+        def post(self, path, json):
+            captured["path"] = path
+            captured["json"] = json
+            return FakeResponse()
+
+    client._client = FakeHttpClient()
+    client.get_raw_paragraph({"chapter_id": "Chapter_16", "paragraph_id": 18})
+
+    assert captured == {
+        "path": "/retrieve/raw-paragraph",
+        "json": {"chapter_id": "Chapter_16", "paragraph_id": 18},
+    }
+
+
+def test_get_summary_paragraph_posts_exact_metadata_lookup() -> None:
+    client = RagApiClient()
+    captured: dict = {}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"hits": []}
+
+    class FakeHttpClient:
+        def post(self, path, json):
+            captured["path"] = path
+            captured["json"] = json
+            return FakeResponse()
+
+    client._client = FakeHttpClient()
+    client.get_summary_paragraph({"chapter_id": "Chapter_16", "paragraph_id": 18})
+
+    assert captured == {
+        "path": "/retrieve/summary-paragraph",
+        "json": {"chapter_id": "Chapter_16", "paragraph_id": 18},
+    }

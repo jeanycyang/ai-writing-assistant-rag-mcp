@@ -82,6 +82,24 @@ class LinkedRawResponse(BaseModel):
     hits: list[RawHit]
 
 
+class SummaryParagraphRequest(BaseModel):
+    chapter_id: str
+    paragraph_id: int
+
+
+class SummaryParagraphResponse(BaseModel):
+    hits: list[SummaryHit]
+
+
+class RawParagraphRequest(BaseModel):
+    chapter_id: str
+    paragraph_id: int
+
+
+class RawParagraphResponse(BaseModel):
+    hits: list[RawHit]
+
+
 class ChatMessage(BaseModel):
     role: str
     content: str
@@ -104,6 +122,13 @@ class ChatStepTiming(BaseModel):
     elapsed_ms: float
 
 
+class ChatModelInput(BaseModel):
+    phase: str
+    messages: list[dict[str, Any]]
+    tools: list[str] = Field(default_factory=list)
+    format_schema: dict[str, Any] | str | None = None
+
+
 class ChatDebugInfo(BaseModel):
     provider: str
     model: str
@@ -113,6 +138,20 @@ class ChatDebugInfo(BaseModel):
     elapsed_ms: float | None = None
     step_timings: list[ChatStepTiming] = Field(default_factory=list)
     tool_calls: list[ToolCallDebug] = Field(default_factory=list)
+    model_inputs: list[ChatModelInput] = Field(default_factory=list)
+
+
+class ChatVerificationResult(BaseModel):
+    supported: bool
+    direct_answer: bool
+    reason: str
+    recommended_next_action: Literal[
+        "answer",
+        "search_original_text",
+        "search_episode_summaries",
+        "get_raw_paragraph",
+        "get_summary_paragraph",
+    ]
 
 
 class ChatResponse(BaseModel):

@@ -21,6 +21,7 @@ class LLMProvider(ABC):
         messages: list[dict[str, Any]],
         *,
         tools: list[dict[str, Any]] | None = None,
+        format_schema: dict[str, Any] | str | None = None,
         think: bool | str | None = None,
     ) -> dict[str, Any]:
         raise NotImplementedError
@@ -54,6 +55,7 @@ class OllamaProvider(LLMProvider):
         messages: list[dict[str, Any]],
         *,
         tools: list[dict[str, Any]] | None = None,
+        format_schema: dict[str, Any] | str | None = None,
         think: bool | str | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -67,6 +69,8 @@ class OllamaProvider(LLMProvider):
         }
         if tools is not None:
             payload["tools"] = tools
+        if format_schema is not None:
+            payload["format"] = format_schema
         if think is not None:
             payload["think"] = think
         response = self._client.post(

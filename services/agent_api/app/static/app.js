@@ -2,7 +2,7 @@ const state = {
   sessions: [],
   activeSessionId: null,
   activeSession: null,
-  pendingResponses: new Map(),
+  responsePayloads: new Map(),
 };
 
 const sessionListEl = document.getElementById("session-list");
@@ -14,6 +14,7 @@ const formEl = document.getElementById("composer");
 const inputEl = document.getElementById("message-input");
 const timingEl = document.getElementById("include-timing");
 const newSessionButtonEl = document.getElementById("new-session-button");
+const RESPONSE_STORAGE_KEY = "fanfiction-rag-response-payloads";
 
 function setStatus(message, isError = false) {
   statusEl.textContent = message;
@@ -33,6 +34,46 @@ function escapeHtml(value) {
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
+}
+
+function responseStorageId(sessionId, createdAt) {
+  return `${sessionId}:${createdAt}`;
+}
+
+function saveResponsePayloads() {
+  const serializable = Object.fromEntries(state.responsePayloads.entries());
+  localStorage.setItem(RESPONSE_STORAGE_KEY, JSON.stringify(serializable));
+}
+
+function loadResponsePayloads() {
+  try {
+    const raw = localStorage.getItem(RESPONSE_STORAGE_KEY);
+    if (!raw) {
+      return;
+    }
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      state.responsePayloads = new Map(Object.entries(parsed));
+    }
+  } catch {
+    state.responsePayloads = new Map();
+  }
+}
+
+async function copyText(value) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const helper = document.createElement("textarea");
+  helper.value = value;
+  helper.setAttribute("readonly", "");
+  helper.style.position = "absolute";
+  helper.style.left = "-9999px";
+  document.body.appendChild(helper);
+  helper.select();
+  document.execCommand("copy");
+  document.body.removeChild(helper);
 }
 
 function renderSessions() {
@@ -70,18 +111,40 @@ function renderMessages() {
     `;
 
     if (message.role === "assistant") {
-      const pending = state.pendingResponses.get(message.created_at);
-      if (pending) {
+      const payloadKey = responseStorageId(state.activeSessionId, message.created_at);
+      const payload = state.responsePayloads.get(payloadKey);
+      if (payload) {
+        const actions = document.createElement("div");
+        actions.className = "assistant-actions";
+        const copyButton = document.createElement("button");
+        copyButton.type = "button";
+        copyButton.className = "copy-response-button";
+        copyButton.textContent = "Copy HTTP Response";
+        copyButton.addEventListener("click", async () => {
+          try {
+            await copyText(JSON.stringify(payload, null, 2));
+            setStatus("Copied HTTP response.");
+          } catch (error) {
+            setStatus(error.message || "Failed to copy HTTP response.", true);
+          }
+        });
+        actions.appendChild(copyButton);
+        wrapper.appendChild(actions);
+
         const extras = document.createElement("div");
         extras.className = "assistant-extras";
         extras.innerHTML = `
           <details>
+            <summary>Model Inputs</summary>
+            <div class="prompt-block">${escapeHtml(JSON.stringify(payload.debug?.model_inputs || [], null, 2))}</div>
+          </details>
+          <details>
             <summary>Citations</summary>
-            <div class="citations">${escapeHtml(JSON.stringify(pending.citations, null, 2))}</div>
+            <div class="citations">${escapeHtml(JSON.stringify(payload.citations, null, 2))}</div>
           </details>
           <details>
             <summary>Debug</summary>
-            <div class="debug-block">${escapeHtml(JSON.stringify(pending.debug, null, 2))}</div>
+            <div class="debug-block">${escapeHtml(JSON.stringify(payload.debug, null, 2))}</div>
           </details>
         `;
         wrapper.appendChild(extras);
@@ -157,7 +220,6 @@ async function ensureSession() {
 async function createSession() {
   setStatus("Creating session...");
   const created = await fetchJson("/sessions", { method: "POST" });
-  state.pendingResponses.clear();
   await refreshSessions();
   await loadSession(created.session_id);
   inputEl.focus();
@@ -188,10 +250,8 @@ async function sendMessage(event) {
     const assistantMessages = state.activeSession.messages.filter((item) => item.role === "assistant");
     const latestAssistant = assistantMessages[assistantMessages.length - 1];
     if (latestAssistant) {
-      state.pendingResponses.set(latestAssistant.created_at, {
-        citations: response.citations,
-        debug: response.debug,
-      });
+      state.responsePayloads.set(responseStorageId(state.activeSessionId, latestAssistant.created_at), response);
+      saveResponsePayloads();
     }
     renderActiveSession();
     inputEl.value = "";
@@ -212,6 +272,7 @@ inputEl.addEventListener("keydown", (event) => {
   }
 });
 
+loadResponsePayloads();
 ensureSession().catch((error) => {
   setStatus(error.message || "Failed to load app.", true);
 });

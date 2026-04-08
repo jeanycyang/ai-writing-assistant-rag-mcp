@@ -186,3 +186,4 @@ def test_root_and_static_assets_are_served(monkeypatch) -> None:
     assert "<!doctype html>" in root.text.lower()
     assert asset.status_code == 200
     assert "ensureSession" in asset.text
+    assert "Model Inputs" in asset.text
