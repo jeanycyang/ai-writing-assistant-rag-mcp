@@ -1,6 +1,6 @@
 PYTHON ?= python3.12
 
-.PHONY: venv install dev-install up down logs migrate ingest-sample test
+.PHONY: venv install dev-install up down logs migrate ingest-sample cleanup-sample-data test
 
 venv:
 	test -d venv || $(PYTHON) -m venv venv
@@ -25,6 +25,9 @@ migrate:
 
 ingest-sample:
 	source venv/bin/activate && python scripts/ingest_data.py --summary-dir data/sample/summaries --raw-dir data/sample/raw
+
+cleanup-sample-data:
+	source venv/bin/activate && python scripts/cleanup_sample_data.py
 
 test:
 	source venv/bin/activate && pytest

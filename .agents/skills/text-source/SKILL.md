@@ -12,6 +12,14 @@ Current source locations:
 - Summary markdown: `~/Documents/ocr/AI_summary_v2/*.md`
 - Raw episode text: `~/Documents/ocr/text/*.md`
 
+Production note:
+
+- `data/sample/*` is demo/test-only content
+- do not use `data/sample/*` as a production ingestion source
+- for production, ingest from the OCR roots above or make those roots the defaults in `.env`
+- if sample data was already imported, remove it first with:
+  - `source venv/bin/activate && python scripts/cleanup_sample_data.py`
+
 ## Critical Rules
 
 - Treat both summaries and raw text as Traditional Chinese used in Taiwan.
@@ -28,6 +36,50 @@ Current source locations:
 3. Preserve a direct mapping from source file path to `chapter_id`.
 4. Preserve `## <paragraph number>` headings when available and use them as the primary paragraph-link key.
 5. If a file deviates from the expected structure, fail loudly unless the user explicitly wants a tolerant repair path.
+
+### Import Real Data Into PostgreSQL
+
+Use the local ingestion script with the real OCR roots:
+
+```bash
+source venv/bin/activate
+python scripts/ingest_data.py \
+  --summary-dir ~/Documents/ocr/AI_summary_v2 \
+  --raw-dir ~/Documents/ocr/text
+```
+
+Recommended execution order:
+
+1. `docker compose up -d postgres`
+2. `source venv/bin/activate && alembic upgrade head`
+3. `source venv/bin/activate && python scripts/cleanup_sample_data.py`
+4. inspect one summary file and one raw file
+5. run the ingestion command above
+
+Useful spot checks:
+
+```bash
+sed -n '1,80p' ~/Documents/ocr/AI_summary_v2/Chapter_34_summary.md
+sed -n '1,80p' ~/Documents/ocr/text/Chapter_34.md
+```
+
+Expected ingestion result:
+
+```json
+{
+  "summary_files": 34,
+  "summary_records": 812,
+  "raw_files": 34,
+  "raw_chunks": 965
+}
+```
+
+Notes:
+
+- file names become `chapter_id`
+- both roots should contain `.md` files
+- malformed summary files should fail loudly with the offending path
+- if paragraph headers do not line up between summary and raw files, escalate before inventing a mapping
 
 ## Expected Formats
 

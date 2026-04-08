@@ -37,6 +37,18 @@ pip install -r requirements-dev.txt
 cp .env.example .env
 ```
 
+## Quick Start
+
+For production import, use this order:
+
+1. `source venv/bin/activate`
+2. `docker compose up -d postgres`
+3. `alembic upgrade head`
+4. `python scripts/cleanup_sample_data.py`
+5. import real OCR data from `~/Documents/ocr/AI_summary_v2` and `~/Documents/ocr/text`
+
+The detailed production import procedure is in [Quick Start: Import Real OCR Data](#quick-start-import-real-ocr-data).
+
 ## Ollama on macOS Host
 
 Run Ollama on the host, not in Docker. The default model in `.env.example` is:
@@ -89,6 +101,27 @@ This means `agent-api` can be live but not ready if Ollama is down or the config
 
 Sample data is included under [data/sample](/Users/jeanycyang/Documents/fanfiction-rag/data/sample).
 
+Production rule:
+
+- `data/sample` is test/demo data only
+- do not use `data/sample` for production ingestion
+- for production, always ingest from the real OCR roots explicitly or set `.env` to the real OCR roots
+
+If sample/demo records were already imported into PostgreSQL, remove them before production import:
+
+```bash
+source venv/bin/activate
+python scripts/cleanup_sample_data.py
+```
+
+Or via `make`:
+
+```bash
+make cleanup-sample-data
+```
+
+This deletes only records whose `source_path` starts with `data/sample/`.
+
 ```bash
 source venv/bin/activate
 python scripts/ingest_data.py --summary-dir data/sample/summaries --raw-dir data/sample/raw
@@ -108,6 +141,95 @@ Default embedding choice: `BAAI/bge-m3`. It is multilingual and practical for Tr
 Query embeddings are generated outside `rag-api`. In the current implementation, `agent-api` computes query embeddings and sends them to `rag-api`, so `rag-api` stays retrieval-only and does not depend on PyTorch.
 
 The `agent-api` Docker image now prefetches the configured embedding model during build, so container recreates do not start from an empty Hugging Face cache. If you change `EMBEDDING_MODEL`, rebuild `agent-api` so the new model is baked into the image.
+
+## Quick Start: Import Real OCR Data
+
+Real source roots used by the project:
+
+- summary markdown: `~/Documents/ocr/AI_summary_v2`
+- raw episode markdown: `~/Documents/ocr/text`
+
+Use this flow to import the real Traditional Chinese (Taiwan) source data into PostgreSQL.
+
+1. Start PostgreSQL.
+
+```bash
+docker compose up -d postgres
+```
+
+2. Apply the schema locally.
+
+```bash
+source venv/bin/activate
+alembic upgrade head
+```
+
+3. Remove any previously imported sample/demo data.
+
+```bash
+source venv/bin/activate
+python scripts/cleanup_sample_data.py
+```
+
+4. Inspect one real summary file and one real raw file before importing.
+
+```bash
+sed -n '1,80p' ~/Documents/ocr/AI_summary_v2/Chapter_34_summary.md
+sed -n '1,80p' ~/Documents/ocr/text/Chapter_34.md
+```
+
+What to verify:
+
+- files are readable as UTF-8
+- summaries use `## <paragraph number>` headings
+- raw text uses matching `## <paragraph number>` headings when available
+- Traditional Chinese wording is intact
+
+5. Run ingestion against the real roots.
+
+```bash
+source venv/bin/activate
+python scripts/ingest_data.py \
+  --summary-dir ~/Documents/ocr/AI_summary_v2 \
+  --raw-dir ~/Documents/ocr/text
+```
+
+6. Read the JSON result.
+
+Expected output shape:
+
+```json
+{
+  "summary_files": 34,
+  "summary_records": 812,
+  "raw_files": 34,
+  "raw_chunks": 965
+}
+```
+
+Important import rules:
+
+- summary and raw files must both be `.md`
+- `chapter_id` is derived from the source filename stem
+- summary parsing fails loudly if required fields are missing
+- paragraph linkage works best when both layers preserve the same `## <number>` headings
+- the importer preserves Traditional Chinese and does not convert to Simplified Chinese
+
+If the real source files should become the default local roots, set these in `.env`:
+
+```bash
+SUMMARY_DATA_DIR=/Users/jeanycyang/Documents/ocr/AI_summary_v2
+RAW_DATA_DIR=/Users/jeanycyang/Documents/ocr/text
+```
+
+Then the shorter command works:
+
+```bash
+source venv/bin/activate
+python scripts/ingest_data.py
+```
+
+For production use, prefer setting the real OCR roots in `.env` so the default ingestion command never points at demo content.
 
 ## API Overview
 
