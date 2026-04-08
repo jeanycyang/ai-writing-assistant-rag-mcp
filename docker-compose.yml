@@ -40,6 +40,8 @@ services:
       start_period: 15s
 
   agent-api:
+    profiles:
+      - legacy-agent
     build:
       context: .
       dockerfile: services/agent_api/Dockerfile

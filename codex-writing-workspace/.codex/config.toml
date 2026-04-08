@@ -1,0 +1,15 @@
+[mcp_servers.fanfic_rag]
+command = "../venv/bin/python"
+args = ["-u", "../services/codex_mcp/server.py"]
+cwd = "."
+startup_timeout_sec = 10
+tool_timeout_sec = 120
+
+[mcp_servers.fanfic_rag.tools.fanfic_lookup]
+approval_mode = "approve"
+
+[mcp_servers.fanfic_rag.tools.get_chapter_summary]
+approval_mode = "approve"
+
+[mcp_servers.fanfic_rag.tools.get_raw_paragraph]
+approval_mode = "approve"

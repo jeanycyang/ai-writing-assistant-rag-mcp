@@ -1,12 +1,13 @@
 # Local-First Fanfiction RAG
 
-Local-first retrieval-augmented generation for fanfiction writing assistance on macOS. The stack keeps retrieval in a plain HTTP `rag-api`, isolates model/tool-calling behavior inside `agent-api`, and uses Ollama on the host machine instead of in Docker.
+Local-first retrieval-augmented generation for fanfiction writing assistance on macOS. The primary path is now Codex plus a local MCP server backed by `rag-api`, while `agent-api` remains available only as a legacy opt-in service.
 
 ## Architecture
 
 - `postgres`: PostgreSQL with `pgvector` for structured summary embeddings and raw-text embeddings.
 - `rag-api`: FastAPI retrieval service with vendor-neutral HTTP contracts.
-- `agent-api`: FastAPI chat service with a provider abstraction. `OllamaProvider` is implemented for v1.
+- `services/codex_mcp/server.py`: local STDIO MCP server that exposes writing-oriented retrieval tools to Codex.
+- `agent-api`: legacy FastAPI chat service with a provider abstraction. It is suspended from default Docker startup.
 - `scripts/ingest_data.py`: local ingestion entrypoint for summary markdown and raw episode text.
 
 The retrieval policy is summary-first:
@@ -17,7 +18,7 @@ The retrieval policy is summary-first:
 
 This keeps canon lookup compact and fast while still allowing fallback to scene-level wording and nuance.
 
-Current `agent-api /chat` behavior:
+Legacy `agent-api /chat` behavior:
 
 1. deterministically call `search_episode_summaries`
 2. deterministically call `get_linked_original_text` for the returned summary hits
@@ -65,6 +66,55 @@ http://host.docker.internal:11434
 
 Change `OLLAMA_MODEL` in `.env` if you want a different local model.
 
+The default writing workflow no longer depends on Ollama. Ollama is only needed if you explicitly start the legacy `agent-api` profile.
+
+## Codex Writing Workspace
+
+For fanfic writing sessions, open [codex-writing-workspace/README.md](/Users/jeanycyang/Documents/fanfiction-rag/codex-writing-workspace/README.md) instead of the repo root.
+
+That workspace is intentionally documentation-only:
+
+- `AGENTS.md`
+- `PROMPTS.md`
+- `.codex/config.toml`
+
+It does not contain Python or shell launcher files, so Codex is less likely to inspect implementation code by accident during writing sessions.
+
+The workspace MCP config starts the server from the parent repo:
+
+```toml
+[mcp_servers.fanfic_rag]
+command = "../venv/bin/python"
+args = ["-u", "../services/codex_mcp/server.py"]
+cwd = "."
+startup_timeout_sec = 10
+tool_timeout_sec = 120
+```
+
+## MCP Notes
+
+The Codex integration is a local STDIO MCP server, not an HTTP MCP server.
+
+Important implementation details that proved necessary:
+
+- the MCP server must stay alive after replying to `initialize`
+- the writing workspace should not contain code launchers
+- the server reads STDIO input defensively
+- the server writes STDIO output as newline-delimited JSON
+- all logs go to `stderr`, never `stdout`
+- Python is launched with `-u` so stdout/stderr are unbuffered during MCP startup
+
+If you are debugging Codex MCP startup, inspect:
+
+- `~/.codex/log/codex-tui.log`
+
+Useful log markers from `services/codex_mcp/server.py` are:
+
+- `fanfic_rag mcp: server main start`
+- `fanfic_rag mcp: received initialize`
+- `fanfic_rag mcp: writing response id=...`
+- `fanfic_rag mcp: flushed response id=...`
+
 ## Start the Stack
 
 Apply migrations locally if you want to manage schema outside containers:
@@ -76,7 +126,7 @@ alembic upgrade head
 
 Or let the `rag-api` container run migrations at startup.
 
-Start everything except Ollama:
+Start the default stack:
 
 ```bash
 docker compose up --build
@@ -86,16 +136,18 @@ Startup order:
 
 1. `postgres` becomes healthy
 2. `rag-api` runs migrations and starts
-3. `agent-api` starts after `rag-api` is healthy
 
 Health semantics:
 
 - `/healthz` means the API process is up
 - `/readyz` means the service and its dependencies are actually usable
 - `rag-api /readyz` checks PostgreSQL connectivity
-- `agent-api /readyz` checks both `rag-api` and Ollama, and also verifies that the configured `OLLAMA_MODEL` is available
 
-This means `agent-api` can be live but not ready if Ollama is down or the configured model has not been pulled yet.
+Start the legacy `agent-api` only when you explicitly want it:
+
+```bash
+docker compose --profile legacy-agent up --build
+```
 
 ## Ingest Data
 
@@ -138,9 +190,9 @@ The ingestion pipeline:
 
 Default embedding choice: `BAAI/bge-m3`. It is multilingual and practical for Traditional Chinese (Taiwan) text on a Mac-centric local setup. The embedding layer is abstracted so a different provider can be added later without changing the retrieval API.
 
-Query embeddings are generated outside `rag-api`. In the current implementation, `agent-api` computes query embeddings and sends them to `rag-api`, so `rag-api` stays retrieval-only and does not depend on PyTorch.
+Query embeddings are generated outside `rag-api`. The shared vectorized client is now used by both the local MCP server and the legacy `agent-api`, so `rag-api` stays retrieval-only and does not depend on PyTorch.
 
-The `agent-api` Docker image now prefetches the configured embedding model during build, so container recreates do not start from an empty Hugging Face cache. If you change `EMBEDDING_MODEL`, rebuild `agent-api` so the new model is baked into the image.
+The `agent-api` Docker image still prefetches the configured embedding model during build, but that now matters only for the legacy profile.
 
 ## Quick Start: Import Real OCR Data
 
@@ -238,28 +290,50 @@ For production use, prefer setting the real OCR roots in `.env` so the default i
 - `POST /search/summaries`
 - `POST /search/raw`
 - `POST /retrieve/linked-raw`
+- `POST /retrieve/summary-paragraph`
+- `POST /retrieve/raw-paragraph`
+- `POST /retrieve/summary-chapter`
+- `POST /retrieve/raw-chapter`
 - `GET /healthz`
 - `GET /readyz`
 
-`agent-api`
+Legacy `agent-api`
 
 - `POST /chat`
 - `GET /healthz`
 - `GET /readyz`
 
-Both APIs use explicit Pydantic request/response models and standardized citations containing chapter, paragraph, chunk, source path, and score metadata.
+`rag-api` uses explicit Pydantic request/response models and standardized citations containing chapter, paragraph, chunk, source path, and score metadata.
 
-## Example Chat Call
+## Codex MCP Setup
 
 ```bash
-curl -X POST http://localhost:8002/chat \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "message": "任隊長第一次被提到、但人還沒出現，是在哪一段？"
-  }'
+source venv/bin/activate
+docker compose up --build
 ```
 
-If you want timing/debug profiling in the response:
+Codex CLI and the Codex IDE extension will pick up the project-scoped MCP server from [.codex/config.toml](/Users/jeanycyang/Documents/fanfiction-rag/.codex/config.toml) when you open this repo.
+
+The MCP server exposes these tools:
+
+- `fanfic_lookup`
+- `get_summary_paragraph`
+- `get_raw_paragraph`
+- `get_chapter_summary`
+- `get_chapter_text`
+
+If you want Codex to avoid the implementation files and stay focused on writing, open the clean workspace at [codex-writing-workspace/README.md](/Users/jeanycyang/Documents/fanfiction-rag/codex-writing-workspace/README.md) instead of the repo root.
+
+Typical Codex prompts:
+
+- `先用 fanfic 工具確認任隊長第一次被提到、但人還沒出現，是在哪一段。`
+- `先抓 Chapter_16 的完整摘要，再幫我規劃下一段衝突。`
+- `把 Chapter_16 原文抓出來，我想比對語氣和敘事節奏。`
+- `先查 canon，再幫我寫一段新的林妍視角場景，並把你新增的創作部分和 canon 事實分開。`
+
+## Legacy `agent-api`
+
+Example call:
 
 ```bash
 curl -X POST http://localhost:8002/chat \
@@ -289,33 +363,31 @@ Current profiling finding:
 - `get_linked_original_text` is fast in comparison, so raw linked retrieval is not the current hotspot
 - `final_generation` is now the dominant latency component in normal `/chat` requests
 
-Other example prompts:
-
-- `任隊長和林妍公開對峙之前，先發生了什麼事？`
-- `把這段摘要背後對應的原文也找出來。`
-
 ## Health Checks
 
 Check liveness:
 
 ```bash
 curl -s http://localhost:8001/healthz
-curl -s http://localhost:8002/healthz
 ```
 
-Check readiness:
+Check readiness for the default stack:
 
 ```bash
 curl -s http://localhost:8001/readyz
+```
+
+If you start the legacy profile, you can also check:
+
+```bash
+curl -s http://localhost:8002/healthz
 curl -s http://localhost:8002/readyz
 ```
 
-Typical `agent-api /readyz` outcomes:
+Typical legacy `agent-api /readyz` outcomes:
 
 - `status: ok`: `rag-api` is reachable and the configured Ollama model is available
 - `status: degraded`: `rag-api` is down, Ollama is down, or the configured model is missing
-
-If `model_available` is `false`, pull or switch the model before expecting `/chat` to work.
 
 ## Testing
 
@@ -340,22 +412,20 @@ docker compose up --build
 ## Known Limitations
 
 - v1 uses vector search plus metadata filters only. There is no reranker or BM25 hybrid layer yet.
-- chat history is request-scoped and not persisted.
-- `OpenAIProvider` is not implemented yet, but the provider abstraction and provider-neutral tool specs are in place.
-- rebuilding `agent-api` can still take a long time because the embedding model is prefetched into the image.
+- Codex tool use still depends on prompt quality and the repo `AGENTS.md` instructions.
+- full chapter retrieval can return large payloads for long chapters.
+- legacy `agent-api` remains request-scoped and is not part of the recommended writing workflow.
 - the sample data and parsing defaults now assume Traditional Chinese (Taiwan) source material.
 
 ## Current TODOs
 
-- continue broad live end-to-end validation of the rewritten `/chat` across more prompt types
-- continue tuning citation trimming so direct factual answers keep only the strongest evidence
-- continue tightening answer style for direct lookup questions so replies stay shorter and less repetitive
-- refresh any remaining README/spec wording that still implies the old model-driven multi-turn `/chat` loop
-- add explicit handling for more “why” questions so the model prefers immediate evidence over later retrospective inference when appropriate
+- continue real writing-flow validation of the Codex MCP tools across outline, drafting, and continuity-check prompts
+- tune the `fanfic_lookup` output shape so Codex gets enough evidence without overly large payloads
+- decide later whether the legacy `agent-api` should be removed entirely
 
 ## Future Extension Path
 
-- add `OpenAIProvider` or other LLM backends behind the same internal tool spec layer
+- add richer MCP tools if recurring writing tasks need them
 - add alternative embedding providers through `EmbeddingProvider`
 - add a public context-bundle endpoint if external clients need preassembled context
-- add MCP only later if it becomes operationally useful
+- remove the legacy `agent-api` path entirely if it is no longer useful

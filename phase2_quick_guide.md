@@ -1,76 +1,96 @@
 # Phase 2 Quick Guide
 
-## Start
+## Default Stack
 
-Start the local stack:
+Start the default local stack:
 
 ```bash
 source venv/bin/activate
 docker compose up --build
 ```
 
-Open the local UI:
+This starts:
 
-```text
-http://localhost:8002/
-```
+- `postgres`
+- `rag-api`
 
-## Web UI
+It does **not** start `agent-api`.
 
-Use the local chat UI like this:
+## Codex Setup
 
-1. Click `New Session` for a fresh chat.
-2. Type a question in the composer.
-3. Click `Send`.
-4. Ask follow-up questions in the same session.
-5. Switch sessions from the left sidebar.
-6. Expand `Citations` or `Debug` under assistant replies when needed.
+Open the repo in Codex CLI or the Codex IDE extension.
 
-## API
+Codex should pick up:
 
-Create a session:
+- `.codex/config.toml`
+- `AGENTS.md`
 
-```bash
-curl -sS -X POST http://localhost:8002/sessions
-```
+The repo MCP server exposes these tools:
 
-List sessions:
+- `fanfic_lookup`
+- `get_summary_paragraph`
+- `get_raw_paragraph`
+- `get_chapter_summary`
+- `get_chapter_text`
 
-```bash
-curl -sS http://localhost:8002/sessions
-```
+## Typical Prompts
 
-Get one session transcript:
+- `先用 fanfic 工具確認任隊長第一次被提到、但人還沒出現，是在哪一段。`
+- `先抓 Chapter_16 的完整摘要，再幫我規劃下一段衝突。`
+- `把 Chapter_16 原文抓出來，我想比對語氣和敘事節奏。`
+- `先查 canon，再幫我寫一段新的林妍視角場景，並把你新增的創作部分和 canon 事實分開。`
 
-```bash
-curl -sS http://localhost:8002/sessions/<session_id>
-```
+## RAG API
 
-Send a message to a session:
+Check default health:
 
 ```bash
-curl -sS -X POST http://localhost:8002/sessions/<session_id>/chat \
+curl -sS http://localhost:8001/healthz
+curl -sS http://localhost:8001/readyz
+```
+
+Example exact paragraph lookup:
+
+```bash
+curl -sS -X POST http://localhost:8001/retrieve/raw-paragraph \
   -H 'Content-Type: application/json' \
-  -d '{"message":"任隊長第一次被提到是在哪裡？","include_timing":true}'
+  -d '{"chapter_id":"Chapter_16","paragraph_id":18}'
 ```
 
-Delete a session:
+Example full chapter summary lookup:
 
 ```bash
-curl -sS -X DELETE http://localhost:8002/sessions/<session_id>
-```
-
-Stateless chat still works:
-
-```bash
-curl -sS -X POST http://localhost:8002/chat \
+curl -sS -X POST http://localhost:8001/retrieve/summary-chapter \
   -H 'Content-Type: application/json' \
-  -d '{"message":"任隊長第一次被提到是在哪裡？","history":[],"include_timing":true}'
+  -d '{"chapter_id":"Chapter_16"}'
+```
+
+Example full chapter text lookup:
+
+```bash
+curl -sS -X POST http://localhost:8001/retrieve/raw-chapter \
+  -H 'Content-Type: application/json' \
+  -d '{"chapter_id":"Chapter_16"}'
+```
+
+## Legacy `agent-api`
+
+Start the legacy chat service only if you explicitly need it:
+
+```bash
+docker compose --profile legacy-agent up --build
+```
+
+Legacy health checks:
+
+```bash
+curl -sS http://localhost:8002/healthz
+curl -sS http://localhost:8002/readyz
 ```
 
 ## Notes
 
-- Session history is in memory only.
-- If `agent-api` restarts, sessions disappear.
-- Retrieval still runs fresh on every turn.
-- Follow-up context comes from recent session history, not persisted retrieval memory.
+- The recommended writing workflow is Codex + MCP, not `agent-api`.
+- Query embeddings are generated outside `rag-api` by the shared client used by the MCP server.
+- Full chapter raw text is reconstructed from overlapping stored chunks before being returned.
+- `agent-api` is suspended by default and should not start unless the `legacy-agent` profile is requested.

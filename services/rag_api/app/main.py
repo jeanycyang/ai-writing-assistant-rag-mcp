@@ -5,12 +5,15 @@ from sqlalchemy.orm import Session
 from services.rag_api.app import service
 from shared.db import get_db
 from shared.schemas import (
+    ChapterRequest,
     LinkedRawRequest,
     LinkedRawResponse,
+    RawChapterResponse,
     RawParagraphRequest,
     RawParagraphResponse,
     RawSearchRequest,
     RawSearchResponse,
+    SummaryChapterResponse,
     SummaryParagraphRequest,
     SummaryParagraphResponse,
     SummarySearchRequest,
@@ -54,9 +57,25 @@ def retrieve_summary_paragraph(
     return service.get_summary_paragraph(db, request)
 
 
+@app.post("/retrieve/summary-chapter", response_model=SummaryChapterResponse)
+def retrieve_summary_chapter(
+    request: ChapterRequest,
+    db: Session = Depends(get_db),
+) -> SummaryChapterResponse:
+    return service.get_summary_chapter(db, request)
+
+
 @app.post("/retrieve/raw-paragraph", response_model=RawParagraphResponse)
 def retrieve_raw_paragraph(
     request: RawParagraphRequest,
     db: Session = Depends(get_db),
 ) -> RawParagraphResponse:
     return service.get_raw_paragraph(db, request)
+
+
+@app.post("/retrieve/raw-chapter", response_model=RawChapterResponse)
+def retrieve_raw_chapter(
+    request: ChapterRequest,
+    db: Session = Depends(get_db),
+) -> RawChapterResponse:
+    return service.get_raw_chapter(db, request)

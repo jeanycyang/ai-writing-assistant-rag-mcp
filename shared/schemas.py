@@ -100,6 +100,43 @@ class RawParagraphResponse(BaseModel):
     hits: list[RawHit]
 
 
+class ChapterRequest(BaseModel):
+    chapter_id: str
+
+
+class SummaryChapterParagraph(BaseModel):
+    paragraph_id: int
+    priority_score: float
+    timeline_layer: str
+    scene: str
+    characters: list[str]
+    mentioned_characters: list[str]
+    tags: list[str]
+    key_events: list[str]
+    plot: str
+    citation: Citation
+
+
+class SummaryChapterResponse(BaseModel):
+    chapter_id: str
+    source_path: str | None = None
+    full_summary_text: str
+    paragraphs: list[SummaryChapterParagraph]
+
+
+class RawChapterParagraph(BaseModel):
+    paragraph_id: int | None = None
+    text: str
+    citations: list[Citation] = Field(default_factory=list)
+
+
+class RawChapterResponse(BaseModel):
+    chapter_id: str
+    source_path: str | None = None
+    full_text: str
+    paragraphs: list[RawChapterParagraph]
+
+
 class ChatMessage(BaseModel):
     role: str
     content: str

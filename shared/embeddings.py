@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from threading import Lock
-
-from sentence_transformers import SentenceTransformer
+from typing import TYPE_CHECKING
 
 from shared.config import Settings, get_settings
+
+if TYPE_CHECKING:
+    from sentence_transformers import SentenceTransformer
 
 
 class EmbeddingProvider(ABC):
@@ -20,6 +22,9 @@ class EmbeddingProvider(ABC):
 class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
     def __init__(self, settings: Settings):
         self._settings = settings
+        # Import lazily so MCP startup can complete before the embedding stack loads.
+        from sentence_transformers import SentenceTransformer
+
         self._model = SentenceTransformer(settings.embedding_model, device=settings.embedding_device)
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:

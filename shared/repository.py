@@ -281,6 +281,10 @@ class RagRepository:
         rows = self.session.execute(stmt).scalars().all()
         return [(row, 1.0) for row in rows]
 
+    def get_summary_chapter(self, *, chapter_id: str) -> list[SummaryChunk]:
+        stmt = select(SummaryChunk).where(SummaryChunk.chapter_id == chapter_id).order_by(SummaryChunk.paragraph_id)
+        return self.session.execute(stmt).scalars().all()
+
     def get_raw_paragraph(self, *, chapter_id: str, paragraph_id: int) -> list[tuple[RawChunk, float]]:
         stmt = (
             select(RawChunk)
@@ -290,3 +294,11 @@ class RagRepository:
         )
         rows = self.session.execute(stmt).scalars().all()
         return [(row, 1.0) for row in rows]
+
+    def get_raw_chapter(self, *, chapter_id: str) -> list[RawChunk]:
+        stmt = (
+            select(RawChunk)
+            .where(RawChunk.chapter_id == chapter_id)
+            .order_by(RawChunk.paragraph_id, RawChunk.chunk_id)
+        )
+        return self.session.execute(stmt).scalars().all()

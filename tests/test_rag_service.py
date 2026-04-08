@@ -2,7 +2,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 from services.rag_api.app import service
-from shared.schemas import RawParagraphRequest, RawSearchRequest, SummaryParagraphRequest, SummarySearchRequest
+from shared.schemas import ChapterRequest, RawParagraphRequest, RawSearchRequest, SummaryParagraphRequest, SummarySearchRequest
 
 
 class FakeRepo:
@@ -72,6 +72,71 @@ class FakeRepo:
         )
         return [(row, 1.0)]
 
+    def get_summary_chapter(self, **kwargs):
+        assert kwargs == {"chapter_id": "episode_01"}
+        return [
+            SimpleNamespace(
+                id=uuid4(),
+                chapter_id="episode_01",
+                paragraph_id=1,
+                priority_score=0.9,
+                timeline_layer="鋪陳",
+                scene="走廊",
+                characters=["林妍"],
+                mentioned_characters=["任隊長"],
+                tags=["傳聞"],
+                key_events=["提到任隊長"],
+                plot="任隊長尚未現身前先被提到。",
+                source_path="data/sample/summaries/episode_01.md",
+            ),
+            SimpleNamespace(
+                id=uuid4(),
+                chapter_id="episode_01",
+                paragraph_id=2,
+                priority_score=0.8,
+                timeline_layer="接觸",
+                scene="頂樓",
+                characters=["林妍", "任隊長"],
+                mentioned_characters=["梅子"],
+                tags=["警告"],
+                key_events=["頂樓對話"],
+                plot="任隊長私下警告林妍。",
+                source_path="data/sample/summaries/episode_01.md",
+            ),
+        ]
+
+    def get_raw_chapter(self, **kwargs):
+        assert kwargs == {"chapter_id": "episode_01"}
+        return [
+            SimpleNamespace(
+                id=uuid4(),
+                chapter_id="episode_01",
+                paragraph_id=1,
+                chunk_id=0,
+                original_text="甲乙丙丁",
+                source_path="data/sample/raw/episode_01.md",
+                linked_summary_id=None,
+            ),
+            SimpleNamespace(
+                id=uuid4(),
+                chapter_id="episode_01",
+                paragraph_id=1,
+                chunk_id=1,
+                original_text="丁戊己",
+                source_path="data/sample/raw/episode_01.md",
+                linked_summary_id=None,
+            ),
+            SimpleNamespace(
+                id=uuid4(),
+                chapter_id="episode_01",
+                paragraph_id=2,
+                chunk_id=2,
+                original_text="庚辛壬",
+                source_path="data/sample/raw/episode_01.md",
+                linked_summary_id=None,
+            ),
+        ]
+
 
 def test_search_summaries_uses_supplied_query_embedding(monkeypatch):
     monkeypatch.setattr(service, "RagRepository", FakeRepo)
@@ -107,3 +172,23 @@ def test_get_raw_paragraph_uses_exact_metadata_lookup(monkeypatch):
         RawParagraphRequest(chapter_id="episode_01", paragraph_id=2),
     )
     assert response.hits[0].chunk_id == 1
+
+
+def test_get_summary_chapter_returns_ordered_chapter_payload(monkeypatch):
+    monkeypatch.setattr(service, "RagRepository", FakeRepo)
+    response = service.get_summary_chapter(None, ChapterRequest(chapter_id="episode_01"))
+
+    assert response.chapter_id == "episode_01"
+    assert [paragraph.paragraph_id for paragraph in response.paragraphs] == [1, 2]
+    assert "## 1" in response.full_summary_text
+    assert "## 2" in response.full_summary_text
+
+
+def test_get_raw_chapter_merges_overlapping_chunks(monkeypatch):
+    monkeypatch.setattr(service, "RagRepository", FakeRepo)
+    response = service.get_raw_chapter(None, ChapterRequest(chapter_id="episode_01"))
+
+    assert response.chapter_id == "episode_01"
+    assert [paragraph.paragraph_id for paragraph in response.paragraphs] == [1, 2]
+    assert response.paragraphs[0].text == "甲乙丙丁戊己"
+    assert response.full_text.startswith("## 1\n甲乙丙丁戊己")

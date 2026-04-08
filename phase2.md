@@ -1,523 +1,245 @@
-# Session
+# Phase 2
 
-## Goal
+## Current Direction
 
-Add interactive in-memory chat sessions so the local app behaves more like `ollama run <model>` or a normal chat panel with follow-up turns.
+Phase 2 is now centered on **Codex-native fanfic writing assistance**, not on improving local-model chat quality.
 
-This phase does **not** require persistent conversation storage.
+The implemented default path is:
 
-## Desired Behavior
+- `postgres` for storage
+- `rag-api` for retrieval
+- a local STDIO MCP server for Codex at `services/codex_mcp/server.py`
+- repo-scoped Codex config in `.codex/config.toml`
+- repo guidance in `AGENTS.md`
 
-- user starts a session
-- user sends multiple follow-up turns
-- `agent-api` keeps session history in memory
-- retrieval still runs fresh on every new turn
-- if `agent-api` restarts, the session is gone
-- a small local web UI can use the same session backend and feel like a normal AI chat app
+`agent-api` still exists, but it is now a **legacy opt-in service** and is suspended from default Docker startup.
 
-## Non-Goals
+## Why The Direction Changed
 
-- no database-backed chat history
-- no long-term memory
-- no vector memory over old chat transcripts
-- no autonomous multi-step tool loop
+The original Phase 2 plan assumed a local `agent-api` plus Ollama chat experience would remain the main product path.
 
-## Local Web UI
+That is no longer the best fit for the actual use case:
 
-Phase 2 should also build a small local web UI on top of the session backend.
+- local Gemma quality is not good enough for production writing help
+- the main need is grounded canon lookup for a stronger model
+- Codex can already use tools directly through MCP
+- the repo already had retrieval contracts worth preserving
 
-Target experience:
+So Phase 2 now focuses on:
 
-- looks and behaves like a simple AI chat interface
-- closer to ChatGPT than to a raw API playground
-- user can create a session and continue follow-up turns in one panel
-- messages appear as a normal chat transcript
-- citations and debug details may be collapsible instead of always visible
+- exposing the fanfic RAG system to Codex directly
+- keeping `rag-api` as the retrieval source of truth
+- reducing reliance on Ollama and legacy chat orchestration
 
-Recommended scope:
+## Implemented Architecture
 
-- local-only UI
-- minimal implementation
-- no auth
-- no persistence beyond the in-memory session API
+### Default path
 
-Recommended features:
+1. Codex loads the repo
+2. Codex sees `.codex/config.toml`
+3. Codex starts the local MCP server
+4. the MCP server generates query embeddings locally
+5. the MCP server calls `rag-api`
+6. Codex uses returned evidence to answer canon questions or assist with drafting
 
-- create a new session
-- list or switch active sessions
-- send a message to the current session
-- render assistant replies in a chat transcript
-- optional expandable section for citations and debug/timing
-- loading/error states
+### Writing-only workspace
 
-Recommended implementation approach:
+For actual writing sessions, the preferred workspace is:
 
-- keep it small and pragmatic
-- use the existing `agent-api` session endpoints as the backend
-- do not duplicate retrieval logic in the frontend
+- `codex-writing-workspace/`
 
-## Endpoint Rule
+That folder is intentionally kept free of Python and shell files. It contains only:
 
-- keep existing `POST /chat` behavior unchanged
-- do not add hidden server-side session behavior to `POST /chat`
-- add session-aware chat alongside it
-- reuse the same internal chat engine for both paths
+- `AGENTS.md`
+- `PROMPTS.md`
+- `.codex/config.toml`
 
-## Recommended Endpoints
+The MCP server implementation lives outside the writing workspace in:
 
-### `POST /chat`
+- `services/codex_mcp/server.py`
 
-Keep this as the current stateless endpoint.
+This separation exists so Codex does not inspect engineering files by accident during fanfic writing sessions.
 
-Behavior:
+### Legacy path
 
-- caller may pass `history`
-- one-shot request/response
-- no server-side memory
+`agent-api` remains available only behind the Docker Compose profile:
 
-### `POST /sessions`
+- `legacy-agent`
 
-Create a new in-memory session.
+Default startup does **not** include it.
 
-Response:
+## Implemented Retrieval Surface
 
-- `session_id`
-- `created_at`
-- `updated_at`
+### Existing retrieval endpoints still used
 
-### `GET /sessions`
+- `POST /search/summaries`
+- `POST /search/raw`
+- `POST /retrieve/linked-raw`
+- `POST /retrieve/summary-paragraph`
+- `POST /retrieve/raw-paragraph`
 
-Optional but useful for local UI/debugging.
+### New chapter-level endpoints
 
-Response:
+- `POST /retrieve/summary-chapter`
+- `POST /retrieve/raw-chapter`
 
-- active in-memory sessions
+These were added so Codex can work with whole-chapter context during:
 
-### `GET /sessions/{id}`
+- outline planning
+- continuity checking
+- prose/style review
+- scene drafting against canon constraints
 
-Optional inspection endpoint.
+## Implemented MCP Tools
 
-Response:
+The MCP server exposes these tools to Codex:
 
-- session metadata
-- recent messages
+- `fanfic_lookup(question, chapter_id?, mode?)`
+- `get_summary_paragraph(chapter_id, paragraph_id)`
+- `get_raw_paragraph(chapter_id, paragraph_id)`
+- `get_chapter_summary(chapter_id)`
+- `get_chapter_text(chapter_id)`
 
-### `POST /sessions/{id}/chat`
+### Tool intent
 
-Primary interactive endpoint.
+- `fanfic_lookup`: broad canon lookup and summary-first evidence gathering
+- `get_summary_paragraph`: exact structured summary paragraph lookup
+- `get_raw_paragraph`: exact raw paragraph lookup
+- `get_chapter_summary`: full chapter summary in paragraph order
+- `get_chapter_text`: full chapter raw text in paragraph order
 
-Request:
+`get_linked_original_text` is intentionally kept internal to orchestration rather than exposed directly as a Codex-facing tool.
 
-- `message`
-- optional timing/debug flags
+## Shared Query-Embedding Client
 
-Response:
+The vectorizing RAG client logic was moved into shared code:
 
-- `answer`
-- `citations`
-- `debug`
-- optional session metadata
+- `shared/rag_client.py`
 
-### `DELETE /sessions/{id}`
+This matters because:
 
-Explicitly clear one session.
+- `rag-api` still stays retrieval-only
+- query embeddings are still generated outside `rag-api`
+- the new MCP path can search summaries/raw without depending on `agent-api`
+- legacy `agent-api` can still reuse the same client
 
-## Session Model
+## Chapter Retrieval Notes
 
-Use an in-memory session manager inside `agent-api`.
+### Summary chapter retrieval
 
-Each session should contain:
+`/retrieve/summary-chapter` returns:
 
-- `session_id`
-- `created_at`
-- `updated_at`
-- `messages`
-- optional `title`
-- optional `last_debug`
+- `chapter_id`
+- `source_path`
+- `full_summary_text`
+- ordered summary paragraphs with citations
 
-Each message should contain:
+### Raw chapter retrieval
 
-- `role`
-- `content`
-- `created_at`
+`/retrieve/raw-chapter` returns:
 
-Recommended message roles:
+- `chapter_id`
+- `source_path`
+- `full_text`
+- ordered raw paragraphs with citations
 
-- `system`
-- `user`
-- `assistant`
+Important implementation detail:
 
-Do **not** persist tool-call transcripts as session memory by default.
-Do **not** persist retrieved raw context as canonical session state.
+- raw chunks are stored with overlap
+- full chapter text cannot be built by naive concatenation
+- the service merges overlapping chunk boundaries before constructing paragraph text
 
-## Session Lifecycle
+## Codex Repo Guidance
 
-### Create
+`AGENTS.md` now defines the default working rules for Codex in this repo:
 
-Client creates a new session and receives a `session_id`.
+- use MCP tools before answering canon questions from memory
+- use chapter-level tools for planning and revision
+- use exact paragraph tools for quote verification and precise references
+- separate canon-backed facts from newly invented prose
+- cite chapter and paragraph when the evidence includes them
 
-### Chat Turn
+The writing-only workspace also has its own `AGENTS.md` and `PROMPTS.md` tuned for drafting and canon-check flows rather than repo engineering.
 
-For each session-backed turn:
+## MCP Handshake Notes
 
-1. load session from memory
-2. append new user turn
-3. derive recent history window
-4. run deterministic retrieval for the new user turn
-5. run one final model generation using:
-   - recent history
-   - fresh retrieval context
-6. append assistant reply
-7. return answer, citations, and debug
+The MCP server integration required several practical fixes before Codex would attach reliably.
 
-### Expire
+The final state worth documenting is:
 
-Sessions should expire automatically after idle timeout.
+- MCP transport is local STDIO
+- the server process is launched with unbuffered Python: `python -u`
+- the server must not exit immediately after replying to `initialize`
+- stdout is reserved for protocol messages only
+- stderr is used for logs and handshake debugging
+- the server writes newline-delimited JSON responses for STDIO
+- the server accepts input defensively during startup
 
-Recommended defaults:
+Useful handshake log markers are:
 
-- idle TTL: `30-60` minutes
-- max sessions: bounded, e.g. `100`
-- max stored turns per session: bounded, e.g. last `20-40` messages
+- `server main start`
+- `received initialize`
+- `writing response id=...`
+- `flushed response id=...`
 
-### Delete
+These logs were important for distinguishing:
 
-Support explicit session deletion.
+- startup/import failures
+- stale workspace config
+- protocol-shape mismatches
+- premature post-initialize exit
 
-## History Handling
+## Docker Compose State
 
-The model should not receive unlimited history.
+The default Docker stack is now:
 
-Recommended strategy:
+- `postgres`
+- `rag-api`
 
-- include only recent turns in the final prompt
-- keep retrieval based on the newest user turn
-- treat prior turns as conversational context, not as canon evidence
+`agent-api` is suspended by default in `docker-compose.yml`.
 
-Suggested first implementation:
+### Default startup
 
-- keep last `6-10` user/assistant messages
-- drop older turns silently for v1
-
-Optional later enhancement:
-
-- summarize older turns into one compact system note
-
-## Chat Flow
-
-Phase 2 should preserve the current deterministic retrieval pattern.
-
-Implementation note:
-
-- refactor the current `/chat` logic into one reusable internal turn function
-- keep `POST /chat` calling that function with caller-supplied `history`
-- let `POST /sessions/{id}/chat` load in-memory session history and call the same function
-- keep one RAG path for both stateless and session-backed chat
-
-Per turn:
-
-1. accept new user message
-2. load recent history
-3. call `search_episode_summaries`
-4. call `get_linked_original_text`
-5. call `search_original_text` only if necessary
-6. build final prompt from:
-   - recent session history
-   - strongest retrieved evidence
-7. generate one answer
-8. append assistant reply to session memory
-
-Important:
-
-- retrieval is run per turn
-- prior retrieved citations are not reused as memory
-- “not stated / insufficient evidence” rules remain in force
-
-## Recommended Data Structures
-
-### In-memory session manager
-
-Responsibilities:
-
-- create session
-- fetch session
-- append message
-- evict expired sessions
-- clear session
-
-Recommended implementation:
-
-- plain Python dict protected by a lock
-- session objects stored by `session_id`
-- lazy TTL cleanup on read/write
-
-That is enough for local single-process use.
-
-## Debug Behavior
-
-Keep current debug behavior and extend it for session chat responses.
-
-Return:
-
-- provider/model
-- elapsed time
-- step timings
-- deterministic retrieval trace
-- session id
-- optional turn index
-
-Do not expose full internal session memory by default in normal `/chat` responses.
-
-## Testing Plan
-
-### Unit tests
-
-- create session
-- append turns
-- TTL expiry
-- delete session
-- history window truncation
-- thread-safe session manager behavior
-
-### API tests
-
-- `POST /sessions`
-- `POST /sessions/{id}/chat`
-- `GET /sessions/{id}`
-- `DELETE /sessions/{id}`
-- invalid session id returns `404`
-
-### End-to-end checks
-
-- start a session
-- ask one question
-- ask a follow-up that depends on prior turn wording
-- confirm session history is used
-- confirm retrieval is still run on the new turn
-
-## Minimal Successful Outcome
-
-Phase 2 session work is successful if:
-
-- a user can create a session and send follow-up messages without resending full history
-- session state is in memory only
-- current deterministic retrieval quality is preserved
-
-
-# Provider-Agnostic
-
-## Goal
-
-Finish the provider boundary so the system is not effectively Ollama-only in its internal shapes, while keeping `rag-api` retrieval contracts vendor-neutral and exposing one stable local conversation backend for editor/chat clients.
-
-Primary user-facing target:
-
-- the Codex panel can use the RAG backend
-
-Secondary target:
-
-- a VS Code chat panel can use the same backend
-
-Important clarification:
-
-- this section is not asking for multiple UIs to be implemented in Phase 2
-- it is asking for one backend design that those clients can call without depending on Ollama-specific request/response shapes
-- `agent-api` is that backend
-
-## Desired Outcome
-
-- `rag-api` remains plain HTTP and provider-neutral
-- `agent-api` can swap model backends without rewriting chat orchestration
-- Codex panel integration is possible through one stable local API surface
-- a VS Code chat panel can also call the same backend
-- tool support remains optional instead of defining the whole architecture
-
-## Current State
-
-Already present:
-
-- `LLMProvider` base class
-- `OllamaProvider`
-- provider selection through settings
-- provider-neutral retrieval APIs in `rag-api`
-
-Still incomplete:
-
-- message model is still effectively Ollama-first
-- response extraction helpers are Ollama-shaped
-- there is no second provider implementation proving the abstraction
-- the client-facing backend contract is not yet described clearly enough for Codex panel / VS Code chat panel use
-
-## Scope
-
-Finish provider-agnostic design at two distinct levels:
-
-1. model backend abstraction inside `agent-api`
-2. client-facing conversation API so editor/chat clients can call the same local RAG service
-
-This section is **not** the same as “implement OpenAI now”.
-It is about making sure:
-
-- model-provider internals are normalized
-- client-facing chat endpoints stay stable
-- Codex panel is the primary integration target
-- VS Code chat panel can reuse the same backend contract
-
-Implementation note:
-
-- do not guess how Codex panel integration or VS Code-side integration should work
-- search online official documentation before implementation
-- prefer official Codex, VS Code, extension, or chat integration docs over informal examples
-
-## Internal Provider Contract
-
-Define a cleaner internal provider contract around:
-
-- input messages
-- final text generation
-- health check
-- optional structured tool support
-
-Recommended internal types:
-
-- `ProviderMessage`
-- `ProviderResponse`
-- `ProviderHealth`
-
-Recommended provider methods:
-
-- `complete(messages, *, max_output_tokens?, temperature?, stop?)`
-- `healthcheck()`
-- optional future:
-  - `supports_tools()`
-  - `build_tool_definitions()`
-
-Important:
-
-- current stateless chat and future session-based chat should still use deterministic retrieval and one final completion
-- tool support stays optional in the provider interface
-- do not design this phase around model-driven tool loops again
-
-## Message Normalization
-
-Normalize internal message shape so it is not Ollama-specific.
-
-Recommended internal message model:
-
-```text
-role: system | user | assistant
-content: string
+```bash
+docker compose up --build
 ```
 
-Optional future fields:
+### Explicit legacy startup
 
-- `name`
-- `metadata`
-
-Provider adapters should translate this internal format into:
-
-- Ollama chat payloads
-- future OpenAI Responses / Chat Completions payloads
-- any other backend-specific message shape
-
-## Response Normalization
-
-Normalize provider output into a simple internal response model:
-
-```text
-content: string
-raw_payload: dict
-provider_name: string
-model_name: string
+```bash
+docker compose --profile legacy-agent up --build
 ```
 
-This keeps chat orchestration code from depending on Ollama-specific response fields.
+## What Is Still Legacy
 
-## Provider Configuration
+These pieces still exist, but they are not the recommended path:
 
-Make provider configuration explicit and complete in settings and docs.
+- `agent-api`
+- local web chat UI under `agent-api`
+- Ollama-backed `/chat`
+- session-oriented legacy chat flow
 
-Keep:
+They remain in the repo for compatibility and manual testing only.
 
-- `LLM_PROVIDER=ollama`
+## Acceptance State
 
-Prepare for:
+Phase 2 is now considered implemented when these conditions hold:
 
-- `LLM_PROVIDER=openai`
-- `LLM_PROVIDER=<other>`
+- Codex can load the repo and see the MCP tools
+- chapter-level summary and raw retrieval are available through `rag-api`
+- default Docker startup does not start `agent-api`
+- Codex can use the repo-level instructions in `AGENTS.md`
+- the shared vectorized client works without `agent-api`
 
-Recommended config groups by provider:
+## Verification Summary
 
-### Ollama
+Current implementation was verified with:
 
-- base URL
-- model name
-- timeout
-- keep-alive
-- generation cap
-
-### OpenAI-ready placeholders
-
-- API key
-- model name
-- base URL override if needed
-- request timeout
-
-Do not fully implement OpenAI if it is not needed yet, but make adding it straightforward.
-
-## Client-Facing Backend Contract
-
-The Codex panel and any future VS Code chat panel integration should talk to `agent-api`, not directly to provider-specific model APIs.
-
-Recommended principle:
-
-- clients talk to `agent-api`
-- `agent-api` owns session memory and retrieval orchestration
-- `rag-api` remains retrieval-only
-
-The intended consumers here include:
-
-- the Codex panel
-- a VS Code chat panel
-- a small local web UI
-- a CLI REPL
-
-The important requirement is:
-
-- these clients should be able to use the RAG system through one stable local API surface
-- they should not need to reimplement retrieval orchestration
-- they should not depend on Ollama-specific request/response shapes
-
-This is provider-agnostic at the client layer because:
-
-- the client does not need to know whether the backend model is Ollama or something else
-- the client does not need to know how retrieval was orchestrated internally
-- the client only needs the stable `agent-api` contract
-
-## Testing Plan
-
-### Provider unit tests
-
-- provider-independent message normalization
-- provider response normalization
-- healthcheck contract normalization
-
-### Adapter tests
-
-- Ollama adapter remains green against the normalized provider contract
-- adding a second provider should require a new adapter, not a rewrite of chat orchestration
-
-### Client-contract checks
-
-- validate that the exposed conversation API is stable enough for Codex panel usage
-- validate that the same backend contract can also support a VS Code chat panel
-- confirm that retrieval remains internal to `agent-api` and is not pushed into the client
-
-## Minimal Successful Outcome
-
-Provider-agnostic work is successful if:
-
-- the provider boundary is cleaner and no longer tightly coupled to Ollama-shaped messages/responses
-- the Codex panel can use `agent-api` as the stable local RAG conversation backend
-- a VS Code chat panel can also use the same backend contract
-- adding a future provider is straightforward and does not affect `rag-api`
+- targeted tests for the new chapter retrieval endpoints
+- targeted tests for the new MCP server
+- full repo test run
+- Compose service checks showing:
+  - default services: `postgres`, `rag-api`
+  - legacy profile services: `postgres`, `rag-api`, `agent-api`
+- direct MCP handshake probes against `services/codex_mcp/server.py`
+- Codex log inspection showing `initialize` receipt and response flush

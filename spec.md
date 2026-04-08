@@ -1,3 +1,31 @@
+## Status Note
+
+This file contains the original design direction and is no longer fully current.
+
+The repo now uses a different primary integration model:
+
+- default path: Codex + local MCP server + `rag-api`
+- legacy path: `agent-api` behind the `legacy-agent` Docker Compose profile
+
+Important differences from the original spec:
+
+- MCP is now part of the implemented default workflow
+- `agent-api` is no longer the primary user path
+- Codex-native tool access is preferred over Ollama-backed local chat
+- chapter-level retrieval endpoints now exist:
+  - `POST /retrieve/summary-chapter`
+  - `POST /retrieve/raw-chapter`
+
+When this file conflicts with the current repo:
+
+- trust `README.md` for operational setup
+- trust `AGENTS.md` for Codex behavior guidance
+- trust the current code and tests for implemented behavior
+
+The rest of this file is preserved as historical design context.
+
+---
+
 Build a complete local-first RAG system for fanfiction writing assistance on my MacBook Pro M4.
 
 Use these decisions and constraints exactly unless there is a strong technical reason not to:
