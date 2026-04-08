@@ -19,6 +19,7 @@ Rules:
 - Prefer episode summaries for canon lookup.
 - Use linked original text when available to support scene detail and wording.
 - If the evidence is insufficient or conflicting, say so explicitly.
+- If the answer is not stated in the evidence, say that directly and stop. Do not add nearby plot details just to fill space.
 - Preserve Traditional Chinese (Taiwan) wording.
 - Start with the direct answer in the first sentence.
 - Keep the whole answer brief: usually 2-4 sentences, no headings, no bullet lists.
@@ -29,8 +30,8 @@ Rules:
 SUMMARY_TOP_K = 2
 RAW_TOP_K = 2
 LINKED_RAW_TOP_K_PER_HIT = 1
-MAX_FINAL_SUMMARY_HITS = 2
-MAX_FINAL_LINKED_RAW_HITS = 2
+MAX_FINAL_SUMMARY_HITS = 1
+MAX_FINAL_LINKED_RAW_HITS = 1
 MAX_FINAL_RAW_HITS = 1
 MAX_RETURNED_CITATIONS = 4
 
@@ -101,6 +102,66 @@ def _extract_summary_hit_ids(result: dict[str, Any]) -> list[str]:
     return summary_hit_ids
 
 
+def _primary_summary_hit(result: dict[str, Any]) -> dict[str, Any] | None:
+    hits = result.get("hits", [])
+    if not hits:
+        return None
+    return hits[0]
+
+
+def _primary_summary_id(result: dict[str, Any]) -> str | None:
+    hit = _primary_summary_hit(result)
+    if not hit:
+        return None
+    summary_id = hit.get("id")
+    if summary_id:
+        return str(summary_id)
+    citation = hit.get("citation") or {}
+    if citation.get("summary_id"):
+        return str(citation["summary_id"])
+    return None
+
+
+def _filter_linked_raw_hits(result: dict[str, Any], summary_id: str | None) -> dict[str, Any]:
+    if not summary_id:
+        return result
+    filtered_hits = [
+        hit
+        for hit in result.get("hits", [])
+        if str((hit.get("citation") or {}).get("summary_id") or "") == summary_id
+    ]
+    return {"hits": filtered_hits or list(result.get("hits", []))}
+
+
+def _select_citations(
+    citations: list[Citation],
+    *,
+    primary_summary_id: str | None,
+    primary_chapter_id: str | None,
+    limit: int = MAX_RETURNED_CITATIONS,
+) -> list[Citation]:
+    ranked = _sort_citations(_dedupe_citations(citations))
+    preferred: list[Citation] = []
+    for citation in ranked:
+        citation_summary_id = str(citation.summary_id) if citation.summary_id else None
+        if primary_summary_id and citation_summary_id == primary_summary_id:
+            preferred.append(citation)
+        elif primary_chapter_id and citation.chapter_id == primary_chapter_id and citation not in preferred:
+            preferred.append(citation)
+
+    if primary_summary_id and preferred:
+        primary_cluster = [
+            citation
+            for citation in preferred
+            if (str(citation.summary_id) if citation.summary_id else None) == primary_summary_id
+        ]
+        if primary_cluster:
+            return primary_cluster[:limit]
+
+    ordered = preferred + [citation for citation in ranked if citation not in preferred]
+    return ordered[:limit]
+
+
 def _format_summary_hits(result: dict[str, Any]) -> str:
     lines: list[str] = []
     for idx, hit in enumerate(result.get("hits", []), start=1):
@@ -143,8 +204,9 @@ def _build_final_messages(
     linked_raw_result: dict[str, Any],
     raw_result: dict[str, Any],
 ) -> list[dict[str, str]]:
+    primary_summary_id = _primary_summary_id(summary_result)
     summary_context = _select_hits(summary_result, MAX_FINAL_SUMMARY_HITS)
-    linked_raw_context = _select_hits(linked_raw_result, MAX_FINAL_LINKED_RAW_HITS)
+    linked_raw_context = _select_hits(_filter_linked_raw_hits(linked_raw_result, primary_summary_id), MAX_FINAL_LINKED_RAW_HITS)
     raw_context = _select_hits(raw_result, MAX_FINAL_RAW_HITS)
     history_lines = [f"{item.role}: {item.content}" for item in request.history]
     history_block = "\n".join(history_lines) if history_lines else "(none)"
@@ -152,6 +214,8 @@ def _build_final_messages(
         f"User question:\n{request.message}\n\n"
         f"Conversation history:\n{history_block}\n\n"
         "Use only the most relevant evidence below. Do not restate the entire context.\n\n"
+        "If the evidence does not directly answer the question, reply that the answer is not stated or evidence is insufficient."
+        " In that case, do not add unrelated scene summaries.\n\n"
         f"Summary search results:\n{_format_summary_hits(summary_context)}\n\n"
         f"Linked original text:\n{_format_raw_hits(linked_raw_context)}\n\n"
         f"Direct raw search fallback:\n{_format_raw_hits(raw_context)}\n"
@@ -263,8 +327,15 @@ def run_chat(request: ChatRequest) -> ChatResponse:
     _record_step_timing(debug, "final_generation", step_started_at, enabled=include_timing)
 
     message = extract_message(payload)
+    primary_hit = _primary_summary_hit(summary_result)
+    primary_summary_id = _primary_summary_id(summary_result)
+    primary_chapter_id = primary_hit.get("chapter_id") if primary_hit else None
     ranked_citations = _sort_citations(_dedupe_citations(all_citations))
-    trimmed_citations = ranked_citations[:MAX_RETURNED_CITATIONS]
+    trimmed_citations = _select_citations(
+        all_citations,
+        primary_summary_id=primary_summary_id,
+        primary_chapter_id=primary_chapter_id,
+    )
     debug.unique_citation_count = len(ranked_citations)
     debug.completed_without_tool_call = False
     if include_timing:

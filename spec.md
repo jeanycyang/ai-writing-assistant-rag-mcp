@@ -168,25 +168,36 @@ Current `/chat` debug contract:
   * `step_timings`
   * tool-call style retrieval trace for the deterministic steps
 
+Current validation note:
+
+* the rewritten `/chat` has now been live-validated across:
+  * direct factual lookup
+  * evidence-summary prompts
+  * cross-episode reasoning prompts
+  * insufficient-evidence / not-stated prompts
+* the current known quality gap is that some “why” questions still drift toward later retrospective evidence instead of the most immediate scene evidence
+
 Current performance finding:
 
-* the original first-call bottleneck was `search_episode_summaries`
-* after startup preload and split timing, the meaningful substep is `search_episode_summaries_embed_query`
+* `search_episode_summaries_embed_query` was the original first-call bottleneck
+* `agent-api` now prefetches the configured embedding model into the Docker image and uses a thread-safe embedding singleton
+* live validation after rebuild/recreate brought `search_episode_summaries_embed_query` down to roughly `228-420ms` instead of the earlier ~`62s` cold path
 * PostgreSQL retrieval itself is comparatively fast
 * linked raw retrieval is comparatively fast
+* `final_generation` is now the dominant latency component in normal `/chat` calls
 
 Next optimization target:
 
-* continue optimizing `search_episode_summaries_embed_query`
-* if needed, evaluate a smaller embedding model or additional warmup/caching strategies
+* continue reducing final-generation latency where practical
+* if needed, evaluate a smaller chat model or stricter output caps for direct factual questions
 
 Current TODOs worth tracking:
 
-* broaden live end-to-end validation of the rewritten `/chat` beyond the first successful prompt
+* continue broad live end-to-end validation of the rewritten `/chat` across more prompt types
 * continue reducing citation noise for direct factual answers
 * continue tightening answer style for concise lookup questions
 * refresh docs that may still imply the old tool-driven `/chat` loop
-* run the full test suite after the latest performance changes
+* add explicit handling for more “why” questions so immediate evidence is preferred over later retrospective inference when appropriate
 
 4. local file-based ingestion script
 

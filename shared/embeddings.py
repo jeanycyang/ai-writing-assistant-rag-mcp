@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from functools import lru_cache
+from threading import Lock
 
 from sentence_transformers import SentenceTransformer
 
@@ -32,12 +32,24 @@ class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
         return vectors.tolist()
 
 
-@lru_cache(maxsize=1)
+_provider_lock = Lock()
+_provider_instance: EmbeddingProvider | None = None
+
+
 def get_embedding_provider() -> EmbeddingProvider:
-    settings = get_settings()
-    if settings.embedding_provider == "sentence_transformers":
-        return SentenceTransformerEmbeddingProvider(settings)
-    raise ValueError(f"Unsupported embedding provider: {settings.embedding_provider}")
+    global _provider_instance
+    if _provider_instance is not None:
+        return _provider_instance
+
+    with _provider_lock:
+        if _provider_instance is not None:
+            return _provider_instance
+
+        settings = get_settings()
+        if settings.embedding_provider == "sentence_transformers":
+            _provider_instance = SentenceTransformerEmbeddingProvider(settings)
+            return _provider_instance
+        raise ValueError(f"Unsupported embedding provider: {settings.embedding_provider}")
 
 
 def preload_embedding_provider() -> EmbeddingProvider:

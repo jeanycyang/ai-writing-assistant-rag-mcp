@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from threading import Lock, Thread
 
 import httpx
 from fastapi import FastAPI
@@ -9,14 +10,27 @@ from services.agent_api.app.provider import get_llm_provider
 from shared.embeddings import preload_embedding_provider
 from shared.schemas import ChatRequest, ChatResponse
 
+_warmup_lock = Lock()
+_warmup_started = False
 
-def preload_agent_dependencies() -> None:
+
+def _run_embedding_warmup() -> None:
     preload_embedding_provider()
+
+
+def start_agent_warmup() -> bool:
+    global _warmup_started
+    with _warmup_lock:
+        if _warmup_started:
+            return False
+        _warmup_started = True
+    Thread(target=_run_embedding_warmup, name="agent-embedding-warmup", daemon=True).start()
+    return True
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    preload_agent_dependencies()
+    start_agent_warmup()
     yield
 
 

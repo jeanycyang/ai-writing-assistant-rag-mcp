@@ -107,6 +107,8 @@ Default embedding choice: `BAAI/bge-m3`. It is multilingual and practical for Tr
 
 Query embeddings are generated outside `rag-api`. In the current implementation, `agent-api` computes query embeddings and sends them to `rag-api`, so `rag-api` stays retrieval-only and does not depend on PyTorch.
 
+The `agent-api` Docker image now prefetches the configured embedding model during build, so container recreates do not start from an empty Hugging Face cache. If you change `EMBEDDING_MODEL`, rebuild `agent-api` so the new model is baked into the image.
+
 ## API Overview
 
 `rag-api`
@@ -159,10 +161,11 @@ When `include_timing` is enabled, the response includes:
 
 Current profiling finding:
 
-- the original first-call bottleneck was `search_episode_summaries`
-- after startup preload and split timing, the main summary-search cost is now dominated by query embedding generation rather than PostgreSQL retrieval
-- `search_episode_summaries_embed_query` is the useful timing to watch for further optimization
+- `search_episode_summaries_embed_query` was the main cold-start bottleneck
+- `agent-api` now bakes the configured embedding model into the Docker image and uses a thread-safe singleton for query embeddings
+- after rebuild/recreate, live validation showed `search_episode_summaries_embed_query` around `228-420ms` instead of the earlier ~`62s` cold path
 - `get_linked_original_text` is fast in comparison, so raw linked retrieval is not the current hotspot
+- `final_generation` is now the dominant latency component in normal `/chat` requests
 
 Other example prompts:
 
@@ -199,6 +202,12 @@ source venv/bin/activate
 pytest
 ```
 
+Current local status:
+
+- full test suite passes: `32 passed`
+- live `/chat` validation has succeeded across direct lookup, evidence summary, cross-episode reasoning, and insufficient-evidence prompts
+- the main remaining runtime quality gap is answer shaping for some nuanced “why” questions
+
 ## Reset and Rebuild
 
 ```bash
@@ -211,16 +220,16 @@ docker compose up --build
 - v1 uses vector search plus metadata filters only. There is no reranker or BM25 hybrid layer yet.
 - chat history is request-scoped and not persisted.
 - `OpenAIProvider` is not implemented yet, but the provider abstraction and provider-neutral tool specs are in place.
-- local embedding model download can take time on first run.
+- rebuilding `agent-api` can still take a long time because the embedding model is prefetched into the image.
 - the sample data and parsing defaults now assume Traditional Chinese (Taiwan) source material.
 
 ## Current TODOs
 
-- broaden live end-to-end validation of the rewritten `/chat` beyond the initial successful prompt set
+- continue broad live end-to-end validation of the rewritten `/chat` across more prompt types
 - continue tuning citation trimming so direct factual answers keep only the strongest evidence
 - continue tightening answer style for direct lookup questions so replies stay shorter and less repetitive
 - refresh any remaining README/spec wording that still implies the old model-driven multi-turn `/chat` loop
-- run the full test suite after the latest `search_episode_summaries` optimization work
+- add explicit handling for more “why” questions so the model prefers immediate evidence over later retrospective inference when appropriate
 
 ## Future Extension Path
 

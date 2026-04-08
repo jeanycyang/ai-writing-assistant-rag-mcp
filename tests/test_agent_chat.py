@@ -242,6 +242,7 @@ def test_run_chat_passes_context_to_final_model_call(monkeypatch) -> None:
     assert "Summary search results:" in captured_messages[0][1]["content"]
     assert "Linked original text:" in captured_messages[0][1]["content"]
     assert "Do not restate the entire context." in captured_messages[0][1]["content"]
+    assert "do not add unrelated scene summaries" in captured_messages[0][1]["content"]
 
 
 def test_run_chat_trims_citations_to_top_ranked_evidence(monkeypatch) -> None:
@@ -343,9 +344,103 @@ def test_run_chat_trims_citations_to_top_ranked_evidence(monkeypatch) -> None:
 
     response = chat.run_chat(ChatRequest(message="任隊長第一次被提到是在哪裡？"))
 
-    assert len(response.citations) == 4
-    assert [citation.citation_type for citation in response.citations[:2]] == ["raw", "raw"]
+    assert len(response.citations) == 2
+    assert [citation.citation_type for citation in response.citations] == ["raw", "summary"]
     assert response.citations[0].score == 0.88
+    assert {citation.chapter_id for citation in response.citations} == {"episode_01"}
+
+
+def test_run_chat_uses_primary_summary_cluster_for_final_context(monkeypatch) -> None:
+    captured_messages: list[list[dict[str, Any]]] = []
+
+    class ContextProvider(FakeProvider):
+        def complete(
+            self,
+            messages: list[dict[str, Any]],
+            *,
+            tools: list[dict[str, Any]] | None = None,
+            think: bool | str | None = None,
+        ) -> dict[str, Any]:
+            captured_messages.append(messages)
+            return super().complete(messages, tools=tools, think=think)
+
+    class MultiSummaryRagClient(FakeRagClient):
+        def search_summaries(self, payload: dict[str, Any]) -> dict[str, Any]:
+            result = super().search_summaries(payload)
+            result["hits"].append(
+                {
+                    "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                    "chapter_id": "episode_02",
+                    "paragraph_id": 1,
+                    "scene": "會議後",
+                    "plot": "次要線索。",
+                    "key_events": ["旁證"],
+                    "score": 0.42,
+                    "citation": {
+                        "summary_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                        "chapter_id": "episode_02",
+                        "paragraph_id": 1,
+                        "source_path": "data/sample/summaries/episode_02.md",
+                        "score": 0.42,
+                        "citation_type": "summary",
+                    },
+                }
+            )
+            return result
+
+        def get_linked_raw(self, payload: dict[str, Any]) -> dict[str, Any]:
+            assert payload["summary_hit_ids"] == [
+                "11111111-1111-1111-1111-111111111111",
+                "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            ]
+            return {
+                "hits": [
+                    {
+                        "chapter_id": "episode_01",
+                        "paragraph_id": 1,
+                        "chunk_id": 0,
+                        "original_text": "林妍看見值勤表時，先聽見眾人提起任隊長。",
+                        "score": 0.88,
+                        "citation": {
+                            "summary_id": "11111111-1111-1111-1111-111111111111",
+                            "raw_chunk_id": "22222222-2222-2222-2222-222222222222",
+                            "chapter_id": "episode_01",
+                            "paragraph_id": 1,
+                            "chunk_id": 0,
+                            "source_path": "data/sample/raw/episode_01.md",
+                            "score": 0.88,
+                            "citation_type": "raw",
+                        },
+                    },
+                    {
+                        "chapter_id": "episode_02",
+                        "paragraph_id": 1,
+                        "chunk_id": 0,
+                        "original_text": "這段不該進 final context。",
+                        "score": 0.2,
+                        "citation": {
+                            "summary_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                            "raw_chunk_id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+                            "chapter_id": "episode_02",
+                            "paragraph_id": 1,
+                            "chunk_id": 0,
+                            "source_path": "data/sample/raw/episode_02.md",
+                            "score": 0.2,
+                            "citation_type": "raw",
+                        },
+                    },
+                ]
+            }
+
+    monkeypatch.setattr(chat, "get_llm_provider", lambda: ContextProvider())
+    monkeypatch.setattr(chat, "RagApiClient", MultiSummaryRagClient)
+
+    chat.run_chat(ChatRequest(message="任隊長第一次被提到是在哪裡？"))
+
+    prompt = captured_messages[0][1]["content"]
+    assert "chapter=episode_01 paragraph=1" in prompt
+    assert "chapter=episode_02 paragraph=1" not in prompt
+    assert "這段不該進 final context" not in prompt
 
 
 def test_run_chat_returns_503_when_rag_api_fails(monkeypatch) -> None:

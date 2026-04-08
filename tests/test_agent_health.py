@@ -26,17 +26,38 @@ def test_healthz_reports_process_up():
     assert payload["status"] == "ok"
 
 
-def test_lifespan_preloads_embedding_provider(monkeypatch):
+def test_lifespan_starts_background_warmup(monkeypatch):
     called = {"value": False}
 
-    def fake_preload():
+    def fake_start():
         called["value"] = True
+        return True
 
-    monkeypatch.setattr(main, "preload_agent_dependencies", fake_preload)
+    monkeypatch.setattr(main, "start_agent_warmup", fake_start)
 
     with TestClient(main.app):
         pass
     assert called["value"] is True
+
+
+def test_start_agent_warmup_runs_only_once(monkeypatch):
+    calls: list[str] = []
+
+    class FakeThread:
+        def __init__(self, *, target, name, daemon):
+            calls.append(name)
+            self.target = target
+            self.daemon = daemon
+
+        def start(self):
+            return None
+
+    monkeypatch.setattr(main, "Thread", FakeThread)
+    monkeypatch.setattr(main, "_warmup_started", False)
+
+    assert main.start_agent_warmup() is True
+    assert main.start_agent_warmup() is False
+    assert calls == ["agent-embedding-warmup"]
 
 
 def test_readyz_reports_dependency_status(monkeypatch):
