@@ -10,7 +10,17 @@ from fastapi import HTTPException
 from services.agent_api.app.client import RagApiClient
 from services.agent_api.app.provider import extract_message, get_llm_provider
 from shared.config import get_settings
-from shared.schemas import ChatDebugInfo, ChatRequest, ChatResponse, ChatStepTiming, Citation, ToolCallDebug
+from shared.schemas import (
+    ChatDebugInfo,
+    ChatMessage,
+    ChatRequest,
+    ChatResponse,
+    ChatStepTiming,
+    Citation,
+    SessionChatResponse,
+    SessionMessage,
+    ToolCallDebug,
+)
 
 SYSTEM_PROMPT = """You are a local fanfiction canon assistant for Traditional Chinese (Taiwan) source material.
 
@@ -199,7 +209,9 @@ def _needs_direct_raw_search(summary_result: dict[str, Any], linked_raw_result: 
 
 
 def _build_final_messages(
-    request: ChatRequest,
+    *,
+    message: str,
+    history: list[ChatMessage] | list[SessionMessage],
     summary_result: dict[str, Any],
     linked_raw_result: dict[str, Any],
     raw_result: dict[str, Any],
@@ -208,10 +220,10 @@ def _build_final_messages(
     summary_context = _select_hits(summary_result, MAX_FINAL_SUMMARY_HITS)
     linked_raw_context = _select_hits(_filter_linked_raw_hits(linked_raw_result, primary_summary_id), MAX_FINAL_LINKED_RAW_HITS)
     raw_context = _select_hits(raw_result, MAX_FINAL_RAW_HITS)
-    history_lines = [f"{item.role}: {item.content}" for item in request.history]
+    history_lines = [f"{item.role}: {item.content}" for item in history]
     history_block = "\n".join(history_lines) if history_lines else "(none)"
     user_prompt = (
-        f"User question:\n{request.message}\n\n"
+        f"User question:\n{message}\n\n"
         f"Conversation history:\n{history_block}\n\n"
         "Use only the most relevant evidence below. Do not restate the entire context.\n\n"
         "If the evidence does not directly answer the question, reply that the answer is not stated or evidence is insufficient."
@@ -232,7 +244,7 @@ def _record_step_timing(debug: ChatDebugInfo, step: str, started_at: float, *, e
     debug.step_timings.append(ChatStepTiming(step=step, elapsed_ms=round((perf_counter() - started_at) * 1000, 2)))
 
 
-def run_chat(request: ChatRequest) -> ChatResponse:
+def run_chat_turn(*, message: str, history: list[ChatMessage] | list[SessionMessage], include_timing: bool) -> ChatResponse:
     started_at = perf_counter()
     settings = get_settings()
     provider = get_llm_provider()
@@ -241,13 +253,9 @@ def run_chat(request: ChatRequest) -> ChatResponse:
     debug = ChatDebugInfo(provider=settings.llm_provider, model=settings.ollama_model, tool_calls=[])
     all_citations: list[Citation] = []
 
-    include_timing = request.include_timing
-
     try:
         if include_timing:
-            summary_result, summary_timings = rag_client.search_summaries_with_timings(
-                {"query": request.message, "top_k": SUMMARY_TOP_K}
-            )
+            summary_result, summary_timings = rag_client.search_summaries_with_timings({"query": message, "top_k": SUMMARY_TOP_K})
             debug.step_timings.append(
                 ChatStepTiming(step="search_episode_summaries_embed_query", elapsed_ms=summary_timings["embedding_ms"])
             )
@@ -255,14 +263,14 @@ def run_chat(request: ChatRequest) -> ChatResponse:
                 ChatStepTiming(step="search_episode_summaries_rag_api", elapsed_ms=summary_timings["rag_api_ms"])
             )
         else:
-            summary_result = rag_client.search_summaries({"query": request.message, "top_k": SUMMARY_TOP_K})
+            summary_result = rag_client.search_summaries({"query": message, "top_k": SUMMARY_TOP_K})
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"rag-api request failed during search_episode_summaries: {exc}") from exc
     all_citations.extend(_collect_citations(summary_result))
     debug.tool_calls.append(
         ToolCallDebug(
             tool_name="search_episode_summaries",
-            arguments={"query": request.message, "top_k": SUMMARY_TOP_K},
+            arguments={"query": message, "top_k": SUMMARY_TOP_K},
             result_count=len(summary_result.get("hits", [])),
         )
     )
@@ -294,9 +302,7 @@ def run_chat(request: ChatRequest) -> ChatResponse:
     if _needs_direct_raw_search(summary_result, linked_raw_result):
         try:
             if include_timing:
-                raw_result, raw_timings = rag_client.search_raw_with_timings(
-                    {"query": request.message, "top_k": RAW_TOP_K}
-                )
+                raw_result, raw_timings = rag_client.search_raw_with_timings({"query": message, "top_k": RAW_TOP_K})
                 debug.step_timings.append(
                     ChatStepTiming(step="search_original_text_embed_query", elapsed_ms=raw_timings["embedding_ms"])
                 )
@@ -304,19 +310,25 @@ def run_chat(request: ChatRequest) -> ChatResponse:
                     ChatStepTiming(step="search_original_text_rag_api", elapsed_ms=raw_timings["rag_api_ms"])
                 )
             else:
-                raw_result = rag_client.search_raw({"query": request.message, "top_k": RAW_TOP_K})
+                raw_result = rag_client.search_raw({"query": message, "top_k": RAW_TOP_K})
         except httpx.HTTPError as exc:
             raise HTTPException(status_code=503, detail=f"rag-api request failed during search_original_text: {exc}") from exc
         all_citations.extend(_collect_citations(raw_result))
         debug.tool_calls.append(
             ToolCallDebug(
                 tool_name="search_original_text",
-                arguments={"query": request.message, "top_k": RAW_TOP_K},
+                arguments={"query": message, "top_k": RAW_TOP_K},
                 result_count=len(raw_result.get("hits", [])),
             )
         )
 
-    final_messages = _build_final_messages(request, summary_result, linked_raw_result, raw_result)
+    final_messages = _build_final_messages(
+        message=message,
+        history=history,
+        summary_result=summary_result,
+        linked_raw_result=linked_raw_result,
+        raw_result=raw_result,
+    )
     debug.iterations = 1
 
     step_started_at = perf_counter()
@@ -341,3 +353,24 @@ def run_chat(request: ChatRequest) -> ChatResponse:
     if include_timing:
         debug.elapsed_ms = round((perf_counter() - started_at) * 1000, 2)
     return ChatResponse(answer=message.get("content", ""), citations=trimmed_citations, debug=debug)
+
+
+def run_chat(request: ChatRequest) -> ChatResponse:
+    return run_chat_turn(message=request.message, history=request.history, include_timing=request.include_timing)
+
+
+def build_session_chat_response(
+    response: ChatResponse,
+    *,
+    session_id: str,
+    turn_index: int,
+    updated_at: str,
+) -> SessionChatResponse:
+    return SessionChatResponse(
+        answer=response.answer,
+        citations=response.citations,
+        debug=response.debug,
+        session_id=session_id,
+        turn_index=turn_index,
+        updated_at=updated_at,
+    )

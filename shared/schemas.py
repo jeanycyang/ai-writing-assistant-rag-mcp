@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -119,3 +119,55 @@ class ChatResponse(BaseModel):
     answer: str
     citations: list[Citation]
     debug: ChatDebugInfo
+
+
+class SessionMessage(BaseModel):
+    role: Literal["system", "user", "assistant"]
+    content: str
+    created_at: str
+
+
+class SessionCreateResponse(BaseModel):
+    session_id: str
+    title: str | None = None
+    created_at: str
+    updated_at: str
+    message_count: int
+
+
+class SessionSummary(BaseModel):
+    session_id: str
+    title: str | None = None
+    created_at: str
+    updated_at: str
+    message_count: int
+
+
+class SessionListResponse(BaseModel):
+    sessions: list[SessionSummary]
+
+
+class SessionDetailResponse(BaseModel):
+    session_id: str
+    title: str | None = None
+    created_at: str
+    updated_at: str
+    message_count: int
+    messages: list[SessionMessage]
+    last_debug: ChatDebugInfo | None = None
+
+
+class SessionChatRequest(BaseModel):
+    message: str
+    include_timing: bool = False
+
+
+class SessionChatResponse(ChatResponse):
+    session_id: str
+    turn_index: int
+    updated_at: str
+
+
+class SessionDeleteResponse(BaseModel):
+    status: str
+    session_id: str

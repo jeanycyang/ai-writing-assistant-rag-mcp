@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fanfiction RAG Chat</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <h1>Sessions</h1>
+          <button id="new-session-button" type="button">New Session</button>
+        </div>
+        <div id="session-list" class="session-list"></div>
+      </aside>
+      <main class="chat-panel">
+        <header class="chat-header">
+          <div>
+            <h2 id="session-title">New Session</h2>
+            <p id="session-meta">Local-only in-memory chat</p>
+          </div>
+        </header>
+        <section id="messages" class="messages"></section>
+        <div id="status" class="status" aria-live="polite"></div>
+        <form id="composer" class="composer">
+          <textarea
+            id="message-input"
+            name="message"
+            rows="3"
+            placeholder="Ask about canon details..."
+            required
+          ></textarea>
+          <div class="composer-actions">
+            <label class="timing-toggle">
+              <input id="include-timing" type="checkbox" checked />
+              <span>Include timing debug</span>
+            </label>
+            <button id="send-button" type="submit">Send</button>
+          </div>
+        </form>
+      </main>
+    </div>
+    <script src="/static/app.js" defer></script>
+  </body>
+  </html>
