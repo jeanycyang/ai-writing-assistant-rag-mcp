@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from itertools import islice
 from uuid import UUID
 
 from sqlalchemy import Select, select
@@ -97,7 +98,19 @@ class RagRepository:
     def __init__(self, session: Session):
         self.session = session
 
-    def upsert_summary_chunks(self, records: list[ParsedSummaryRecord], embeddings: list[list[float]]) -> None:
+    @staticmethod
+    def _batched(iterable: list[dict], batch_size: int):
+        iterator = iter(iterable)
+        while batch := list(islice(iterator, batch_size)):
+            yield batch
+
+    def upsert_summary_chunks(
+        self,
+        records: list[ParsedSummaryRecord],
+        embeddings: list[list[float]],
+        *,
+        batch_size: int = 32,
+    ) -> None:
         values = []
         for record, embedding in zip(records, embeddings, strict=True):
             values.append(
@@ -119,30 +132,37 @@ class RagRepository:
                     "embedding": embedding,
                 }
             )
-        stmt = insert(SummaryChunk).values(values)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=[SummaryChunk.external_id],
-            set_={
-                "chapter_id": stmt.excluded.chapter_id,
-                "paragraph_id": stmt.excluded.paragraph_id,
-                "priority_score": stmt.excluded.priority_score,
-                "timeline_layer": stmt.excluded.timeline_layer,
-                "scene": stmt.excluded.scene,
-                "characters": stmt.excluded.characters,
-                "mentioned_characters": stmt.excluded.mentioned_characters,
-                "tags": stmt.excluded.tags,
-                "key_events": stmt.excluded.key_events,
-                "plot": stmt.excluded.plot,
-                "embedding_text": stmt.excluded.embedding_text,
-                "source_path": stmt.excluded.source_path,
-                "source_hash": stmt.excluded.source_hash,
-                "embedding": stmt.excluded.embedding,
-            },
-        )
-        self.session.execute(stmt)
+        for batch in self._batched(values, batch_size):
+            stmt = insert(SummaryChunk).values(batch)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=[SummaryChunk.external_id],
+                set_={
+                    "chapter_id": stmt.excluded.chapter_id,
+                    "paragraph_id": stmt.excluded.paragraph_id,
+                    "priority_score": stmt.excluded.priority_score,
+                    "timeline_layer": stmt.excluded.timeline_layer,
+                    "scene": stmt.excluded.scene,
+                    "characters": stmt.excluded.characters,
+                    "mentioned_characters": stmt.excluded.mentioned_characters,
+                    "tags": stmt.excluded.tags,
+                    "key_events": stmt.excluded.key_events,
+                    "plot": stmt.excluded.plot,
+                    "embedding_text": stmt.excluded.embedding_text,
+                    "source_path": stmt.excluded.source_path,
+                    "source_hash": stmt.excluded.source_hash,
+                    "embedding": stmt.excluded.embedding,
+                },
+            )
+            self.session.execute(stmt)
         self.session.flush()
 
-    def upsert_raw_chunks(self, records: list[ParsedRawChunkRecord], embeddings: list[list[float]]) -> None:
+    def upsert_raw_chunks(
+        self,
+        records: list[ParsedRawChunkRecord],
+        embeddings: list[list[float]],
+        *,
+        batch_size: int = 32,
+    ) -> None:
         summary_rows = self.session.execute(select(SummaryChunk)).scalars().all()
         summary_lookup = {(row.chapter_id, row.paragraph_id): row.id for row in summary_rows}
 
@@ -162,22 +182,23 @@ class RagRepository:
                     "linked_summary_id": summary_lookup.get((record.chapter_id, record.paragraph_id)),
                 }
             )
-        stmt = insert(RawChunk).values(values)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=[RawChunk.external_id],
-            set_={
-                "chapter_id": stmt.excluded.chapter_id,
-                "paragraph_id": stmt.excluded.paragraph_id,
-                "chunk_id": stmt.excluded.chunk_id,
-                "original_text": stmt.excluded.original_text,
-                "embedding_text": stmt.excluded.embedding_text,
-                "source_path": stmt.excluded.source_path,
-                "source_hash": stmt.excluded.source_hash,
-                "embedding": stmt.excluded.embedding,
-                "linked_summary_id": stmt.excluded.linked_summary_id,
-            },
-        )
-        self.session.execute(stmt)
+        for batch in self._batched(values, batch_size):
+            stmt = insert(RawChunk).values(batch)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=[RawChunk.external_id],
+                set_={
+                    "chapter_id": stmt.excluded.chapter_id,
+                    "paragraph_id": stmt.excluded.paragraph_id,
+                    "chunk_id": stmt.excluded.chunk_id,
+                    "original_text": stmt.excluded.original_text,
+                    "embedding_text": stmt.excluded.embedding_text,
+                    "source_path": stmt.excluded.source_path,
+                    "source_hash": stmt.excluded.source_hash,
+                    "embedding": stmt.excluded.embedding,
+                    "linked_summary_id": stmt.excluded.linked_summary_id,
+                },
+            )
+            self.session.execute(stmt)
         self.session.flush()
 
     def search_summaries(
