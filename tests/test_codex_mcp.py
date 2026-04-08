@@ -4,6 +4,35 @@ from services.codex_mcp.server import FanficMcpServer
 
 
 class FakeRagClient:
+    def search_summary_characters(self, payload):
+        assert payload == {
+            "characters": ["Character Alpha", "Character Beta"],
+            "operator": "or",
+            "chapter_id": "Chapter_16",
+            "from_chapter": 1,
+            "to_chapter": 40,
+            "min_priority_score": 0.8,
+            "top_k": 3,
+        }
+        return {
+            "hits": [
+                {
+                    "id": "33333333-3333-3333-3333-333333333333",
+                    "chapter_id": "Chapter_16",
+                    "paragraph_id": 5,
+                    "characters": ["Character Alpha"],
+                    "plot": "Character Alpha appears in a key scene.",
+                    "citation": {
+                        "summary_id": "33333333-3333-3333-3333-333333333333",
+                        "chapter_id": "Chapter_16",
+                        "paragraph_id": 5,
+                        "source_path": "data/summary.md",
+                        "citation_type": "summary",
+                    },
+                }
+            ]
+        }
+
     def search_summaries(self, payload):
         assert payload["query"] == "任隊長第一次被提到是在哪裡？"
         assert payload["chapter_id"] == "Chapter_16"
@@ -70,6 +99,7 @@ def test_tools_list_exposes_writing_oriented_tools() -> None:
     tool_names = [tool["name"] for tool in response["result"]["tools"]]
     assert tool_names == [
         "fanfic_lookup",
+        "search_summary_by_characters",
         "get_summary_paragraph",
         "get_raw_paragraph",
         "get_chapter_summary",
@@ -119,3 +149,31 @@ def test_get_chapter_text_normalizes_chapter_id() -> None:
     assert response is not None
     payload = json.loads(response["result"]["content"][0]["text"])
     assert payload["chapter_id"] == "Chapter_16"
+
+
+def test_search_summary_by_characters_normalizes_chapter_id() -> None:
+    server = FanficMcpServer(rag_client=FakeRagClient())
+
+    response = server.handle_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "search_summary_by_characters",
+                "arguments": {
+                    "characters": ["Character Alpha", "Character Beta"],
+                    "operator": "or",
+                    "chapter_id": "Chapter 16",
+                    "from_chapter": 1,
+                    "to_chapter": 40,
+                    "min_priority_score": 0.8,
+                    "top_k": 3,
+                },
+            },
+        }
+    )
+
+    assert response is not None
+    payload = json.loads(response["result"]["content"][0]["text"])
+    assert payload["hits"][0]["chapter_id"] == "Chapter_16"

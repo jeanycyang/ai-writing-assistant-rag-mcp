@@ -117,6 +117,84 @@ def test_get_summary_chapter_posts_chapter_lookup() -> None:
     }
 
 
+def test_search_summary_characters_posts_exact_character_lookup() -> None:
+    client = RagApiClient()
+    captured: dict = {}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"hits": []}
+
+    class FakeHttpClient:
+        def post(self, path, json):
+            captured["path"] = path
+            captured["json"] = json
+            return FakeResponse()
+
+    client._client = FakeHttpClient()
+    client.search_summary_characters(
+        {
+            "characters": ["Character Alpha", "Character Beta"],
+            "operator": "and",
+            "chapter_id": "Chapter_16",
+            "from_chapter": 1,
+            "to_chapter": 40,
+            "min_priority_score": 0.8,
+            "top_k": 5,
+        }
+    )
+
+    assert captured == {
+        "path": "/search/summary-characters",
+        "json": {
+            "characters": ["Character Alpha", "Character Beta"],
+            "operator": "and",
+            "chapter_id": "Chapter_16",
+            "from_chapter": 1,
+            "to_chapter": 40,
+            "min_priority_score": 0.8,
+            "top_k": 5,
+        },
+    }
+
+
+def test_search_summary_characters_omits_limit_when_top_k_missing() -> None:
+    client = RagApiClient()
+    captured: dict = {}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"hits": []}
+
+    class FakeHttpClient:
+        def post(self, path, json):
+            captured["path"] = path
+            captured["json"] = json
+            return FakeResponse()
+
+    client._client = FakeHttpClient()
+    client.search_summary_characters({"characters": ["Character Alpha"], "operator": "or"})
+
+    assert captured == {
+        "path": "/search/summary-characters",
+        "json": {
+            "characters": ["Character Alpha"],
+            "operator": "or",
+            "chapter_id": None,
+            "from_chapter": None,
+            "to_chapter": None,
+            "min_priority_score": None,
+            "top_k": None,
+        },
+    }
+
+
 def test_get_raw_chapter_posts_chapter_lookup() -> None:
     client = RagApiClient()
     captured: dict = {}

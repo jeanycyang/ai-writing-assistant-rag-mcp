@@ -60,6 +60,20 @@ class SummarySearchResponse(BaseModel):
     hits: list[SummaryHit]
 
 
+class SummaryCharacterSearchRequest(BaseModel):
+    characters: list[str] = Field(default_factory=list)
+    operator: Literal["or", "and"] = "or"
+    chapter_id: str | None = None
+    from_chapter: int | None = None
+    to_chapter: int | None = None
+    min_priority_score: float | None = None
+    top_k: int | None = None
+
+
+class SummaryCharacterSearchResponse(BaseModel):
+    hits: list[SummaryHit]
+
+
 class RawSearchRequest(BaseModel):
     query: str | None = None
     query_embedding: list[float]

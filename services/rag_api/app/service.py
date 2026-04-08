@@ -19,6 +19,8 @@ from shared.schemas import (
     SummaryParagraphRequest,
     SummaryParagraphResponse,
     SummaryHit,
+    SummaryCharacterSearchRequest,
+    SummaryCharacterSearchResponse,
     SummarySearchRequest,
     SummarySearchResponse,
 )
@@ -129,6 +131,20 @@ def search_summaries(session: Session, request: SummarySearchRequest) -> Summary
         top_k=request.top_k,
     )
     return SummarySearchResponse(hits=[_build_summary_hit(row, score) for row, score in rows])
+
+
+def search_summary_characters(session: Session, request: SummaryCharacterSearchRequest) -> SummaryCharacterSearchResponse:
+    repo = RagRepository(session)
+    rows = repo.search_summary_characters(
+        characters=request.characters,
+        operator=request.operator,
+        chapter_id=request.chapter_id,
+        from_chapter=request.from_chapter,
+        to_chapter=request.to_chapter,
+        min_priority_score=request.min_priority_score,
+        top_k=request.top_k,
+    )
+    return SummaryCharacterSearchResponse(hits=[_build_summary_hit(row, score) for row, score in rows])
 
 
 def search_raw(session: Session, request: RawSearchRequest) -> RawSearchResponse:

@@ -2,7 +2,14 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 from services.rag_api.app import service
-from shared.schemas import ChapterRequest, RawParagraphRequest, RawSearchRequest, SummaryParagraphRequest, SummarySearchRequest
+from shared.schemas import (
+    ChapterRequest,
+    RawParagraphRequest,
+    RawSearchRequest,
+    SummaryCharacterSearchRequest,
+    SummaryParagraphRequest,
+    SummarySearchRequest,
+)
 
 
 class FakeRepo:
@@ -40,6 +47,32 @@ class FakeRepo:
             linked_summary_id=None,
         )
         return [(row, 0.77)]
+
+    def search_summary_characters(self, **kwargs):
+        assert kwargs == {
+            "characters": ["Character Alpha", "Character Beta"],
+            "operator": "or",
+            "chapter_id": "episode_01",
+            "from_chapter": 1,
+            "to_chapter": 40,
+            "min_priority_score": 0.75,
+            "top_k": 2,
+        }
+        row = SimpleNamespace(
+            id=uuid4(),
+            chapter_id="episode_01",
+            paragraph_id=2,
+            priority_score=0.8,
+            timeline_layer="接觸",
+            scene="頂樓",
+            characters=["林妍", "任隊長"],
+            mentioned_characters=["梅子"],
+            tags=["警告"],
+            key_events=["頂樓對話"],
+            plot="任隊長私下警告林妍。",
+            source_path="data/sample/summaries/episode_01.md",
+        )
+        return [(row, 1.0)]
 
     def get_summary_paragraph(self, **kwargs):
         assert kwargs == {"chapter_id": "episode_01", "paragraph_id": 1}
@@ -154,6 +187,23 @@ def test_search_raw_uses_supplied_query_embedding(monkeypatch):
         RawSearchRequest(query="查詢原文", query_embedding=[0.3, 0.4], top_k=1),
     )
     assert response.hits[0].chunk_id == 1
+
+
+def test_search_summary_characters_uses_exact_character_lookup(monkeypatch):
+    monkeypatch.setattr(service, "RagRepository", FakeRepo)
+    response = service.search_summary_characters(
+        None,
+        SummaryCharacterSearchRequest(
+            characters=["Character Alpha", "Character Beta"],
+            operator="or",
+            chapter_id="episode_01",
+            from_chapter=1,
+            to_chapter=40,
+            min_priority_score=0.75,
+            top_k=2,
+        ),
+    )
+    assert response.hits[0].tags == ["警告"]
 
 
 def test_get_summary_paragraph_uses_exact_metadata_lookup(monkeypatch):

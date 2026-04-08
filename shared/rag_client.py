@@ -85,6 +85,22 @@ class RagApiClient:
     def search_summaries_with_timings(self, payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, float]]:
         return self._vectorized_request("/search/summaries", payload)
 
+    def search_summary_characters(self, payload: dict[str, Any]) -> dict[str, Any]:
+        response = self._client.post(
+            "/search/summary-characters",
+            json={
+                "characters": payload.get("characters", []),
+                "operator": payload.get("operator", "or"),
+                "chapter_id": payload.get("chapter_id"),
+                "from_chapter": payload.get("from_chapter"),
+                "to_chapter": payload.get("to_chapter"),
+                "min_priority_score": payload.get("min_priority_score"),
+                "top_k": payload.get("top_k"),
+            },
+        )
+        response.raise_for_status()
+        return response.json()
+
     def get_linked_raw(self, payload: dict[str, Any]) -> dict[str, Any]:
         response = self._client.post("/retrieve/linked-raw", json=self._normalize_linked_raw_payload(payload))
         response.raise_for_status()

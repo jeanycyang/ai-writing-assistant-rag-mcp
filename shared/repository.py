@@ -4,7 +4,7 @@ import re
 from itertools import islice
 from uuid import UUID
 
-from sqlalchemy import Select, select
+from sqlalchemy import Integer, Select, cast, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -27,19 +27,38 @@ def _summary_query_filters(
     mentioned_character: str | None,
     min_priority_score: float | None,
     tags: list[str],
+    characters: list[str] | None = None,
+    characters_operator: str = "or",
+    tags_operator: str = "or",
+    from_chapter: int | None = None,
+    to_chapter: int | None = None,
 ) -> Select[tuple[SummaryChunk]]:
     if chapter_id:
         stmt = stmt.where(SummaryChunk.chapter_id == chapter_id)
+    if from_chapter is not None or to_chapter is not None:
+        chapter_number = cast(func.nullif(func.regexp_replace(SummaryChunk.chapter_id, r"\D", "", "g"), ""), Integer)
+        if from_chapter is not None:
+            stmt = stmt.where(chapter_number >= from_chapter)
+        if to_chapter is not None:
+            stmt = stmt.where(chapter_number <= to_chapter)
     if timeline_layer:
         stmt = stmt.where(SummaryChunk.timeline_layer == timeline_layer)
     if character:
         stmt = stmt.where(SummaryChunk.characters.contains([character]))
+    if characters:
+        if characters_operator == "and":
+            stmt = stmt.where(SummaryChunk.characters.contains(characters))
+        else:
+            stmt = stmt.where(SummaryChunk.characters.overlap(characters))
     if mentioned_character:
         stmt = stmt.where(SummaryChunk.mentioned_characters.contains([mentioned_character]))
     if min_priority_score is not None:
         stmt = stmt.where(SummaryChunk.priority_score >= min_priority_score)
     if tags:
-        stmt = stmt.where(SummaryChunk.tags.overlap(tags))
+        if tags_operator == "and":
+            stmt = stmt.where(SummaryChunk.tags.contains(tags))
+        else:
+            stmt = stmt.where(SummaryChunk.tags.overlap(tags))
     return stmt
 
 
@@ -221,9 +240,14 @@ class RagRepository:
             chapter_id=chapter_id,
             timeline_layer=timeline_layer,
             character=character,
+            characters=None,
+            characters_operator="or",
             mentioned_character=mentioned_character,
             min_priority_score=min_priority_score,
             tags=tags,
+            tags_operator="or",
+            from_chapter=None,
+            to_chapter=None,
         )
         stmt = stmt.order_by(distance).limit(max(top_k * 5, top_k))
         candidates = [(row[0], float(row[1])) for row in self.session.execute(stmt).all()]
@@ -233,6 +257,37 @@ class RagRepository:
         ]
         reranked.sort(key=lambda item: item[1], reverse=True)
         return reranked[:top_k]
+
+    def search_summary_characters(
+        self,
+        *,
+        characters: list[str],
+        operator: str,
+        chapter_id: str | None,
+        from_chapter: int | None,
+        to_chapter: int | None,
+        min_priority_score: float | None,
+        top_k: int | None,
+    ) -> list[tuple[SummaryChunk, float]]:
+        stmt = select(SummaryChunk)
+        stmt = _summary_query_filters(
+            stmt,
+            chapter_id=chapter_id,
+            timeline_layer=None,
+            character=None,
+            characters=characters,
+            characters_operator=operator,
+            mentioned_character=None,
+            min_priority_score=min_priority_score,
+            tags=[],
+            from_chapter=from_chapter,
+            to_chapter=to_chapter,
+        )
+        stmt = stmt.order_by(SummaryChunk.priority_score.desc(), SummaryChunk.chapter_id, SummaryChunk.paragraph_id)
+        if top_k is not None:
+            stmt = stmt.limit(top_k)
+        rows = self.session.execute(stmt).scalars().all()
+        return [(row, 1.0) for row in rows]
 
     def search_raw(
         self,

@@ -16,6 +16,8 @@ from shared.schemas import (
     SummaryChapterResponse,
     SummaryParagraphRequest,
     SummaryParagraphResponse,
+    SummaryCharacterSearchRequest,
+    SummaryCharacterSearchResponse,
     SummarySearchRequest,
     SummarySearchResponse,
 )
@@ -37,6 +39,14 @@ def readyz(db: Session = Depends(get_db)) -> dict[str, str]:
 @app.post("/search/summaries", response_model=SummarySearchResponse)
 def search_summaries(request: SummarySearchRequest, db: Session = Depends(get_db)) -> SummarySearchResponse:
     return service.search_summaries(db, request)
+
+
+@app.post("/search/summary-characters", response_model=SummaryCharacterSearchResponse)
+def search_summary_characters(
+    request: SummaryCharacterSearchRequest,
+    db: Session = Depends(get_db),
+) -> SummaryCharacterSearchResponse:
+    return service.search_summary_characters(db, request)
 
 
 @app.post("/search/raw", response_model=RawSearchResponse)

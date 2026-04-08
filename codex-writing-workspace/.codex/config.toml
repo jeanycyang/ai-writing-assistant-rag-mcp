@@ -13,3 +13,9 @@ approval_mode = "approve"
 
 [mcp_servers.fanfic_rag.tools.get_raw_paragraph]
 approval_mode = "approve"
+
+[mcp_servers.fanfic_rag.tools.search_summary_by_tags]
+approval_mode = "approve"
+
+[mcp_servers.fanfic_rag.tools.get_chapter_text]
+approval_mode = "approve"

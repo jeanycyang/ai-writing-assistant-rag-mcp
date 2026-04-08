@@ -122,6 +122,26 @@ class FanficMcpServer:
                     },
                 ),
                 McpTool(
+                    name="search_summary_by_characters",
+                    description=(
+                        "Search structured summary paragraphs by one or more exact character names, "
+                        "using `operator: \"or\"` or `operator: \"and\"`, with optional chapter range and minimum priority filters."
+                    ),
+                    input_schema={
+                        "type": "object",
+                        "properties": {
+                            "characters": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+                            "operator": {"type": "string", "enum": ["or", "and"], "default": "or"},
+                            "chapter_id": {"type": ["string", "null"]},
+                            "from_chapter": {"type": ["integer", "null"], "minimum": 1},
+                            "to_chapter": {"type": ["integer", "null"], "minimum": 1},
+                            "min_priority_score": {"type": ["number", "null"]},
+                            "top_k": {"type": ["integer", "null"], "minimum": 1},
+                        },
+                        "required": ["characters"],
+                    },
+                ),
+                McpTool(
                     name="get_summary_paragraph",
                     description="Retrieve the exact structured summary for one chapter paragraph.",
                     input_schema={
@@ -185,6 +205,20 @@ class FanficMcpServer:
         payload = arguments or {}
         if name == "fanfic_lookup":
             return _tool_text(self._fanfic_lookup(payload))
+        if name == "search_summary_by_characters":
+            return _tool_text(
+                self._get_rag_client().search_summary_characters(
+                    {
+                        "characters": payload["characters"],
+                        "operator": payload.get("operator", "or"),
+                        "chapter_id": _canonicalize_chapter_id(payload.get("chapter_id")),
+                        "from_chapter": payload.get("from_chapter"),
+                        "to_chapter": payload.get("to_chapter"),
+                        "min_priority_score": payload.get("min_priority_score"),
+                        "top_k": payload.get("top_k"),
+                    }
+                )
+            )
         if name == "get_summary_paragraph":
             return _tool_text(
                 self._get_rag_client().get_summary_paragraph(
