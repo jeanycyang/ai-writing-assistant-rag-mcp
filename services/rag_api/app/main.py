@@ -22,7 +22,7 @@ from shared.schemas import (
     SummarySearchResponse,
 )
 
-app = FastAPI(title="fanfiction-rag-api")
+app = FastAPI(title="ai-writing-assistance-rag-api")
 
 
 @app.get("/healthz")

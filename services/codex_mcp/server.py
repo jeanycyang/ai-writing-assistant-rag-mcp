@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-SERVER_NAME = "fanfic_rag"
+SERVER_NAME = "ai_writing_assistance"
 SERVER_VERSION = "0.1.0"
 PROTOCOL_VERSION = "2024-11-05"
 ROOT = Path(__file__).resolve().parents[2]
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 
 def _log(message: str) -> None:
-    print(f"fanfic_rag mcp: {message}", file=sys.stderr, flush=True)
+    print(f"ai_writing_assistance mcp: {message}", file=sys.stderr, flush=True)
 
 
 class ToolError(Exception):
@@ -95,7 +95,7 @@ def _write_message(payload: dict[str, Any]) -> None:
     _log(f"flushed response id={payload.get('id')}")
 
 
-class FanficMcpServer:
+class WritingAssistantMcpServer:
     def __init__(self, rag_client: "RagApiClient | None" = None) -> None:
         self._rag_client = rag_client
         self._initialized = False
@@ -103,10 +103,10 @@ class FanficMcpServer:
             tool.name: tool
             for tool in (
                 McpTool(
-                    name="fanfic_lookup",
+                    name="writing_lookup",
                     description=(
-                        "Look up canon evidence for a fanfic writing question. Use this first for continuity, "
-                        "timeline, relationship, and scene-detail questions."
+                        "Look up source-backed evidence for an AI writing assistance question. Use this first for "
+                        "continuity, timeline, relationship, and scene-detail questions."
                     ),
                     input_schema={
                         "type": "object",
@@ -115,7 +115,7 @@ class FanficMcpServer:
                             "chapter_id": {"type": ["string", "null"]},
                             "mode": {
                                 "type": ["string", "null"],
-                                "enum": [None, "canon_overview", "scene_detail", "exact_quote", "exact_location"],
+                                "enum": [None, "source_overview", "scene_detail", "exact_quote", "exact_location"],
                             },
                         },
                         "required": ["question"],
@@ -203,8 +203,8 @@ class FanficMcpServer:
 
     def call_tool(self, name: str, arguments: dict[str, Any] | None) -> dict[str, Any]:
         payload = arguments or {}
-        if name == "fanfic_lookup":
-            return _tool_text(self._fanfic_lookup(payload))
+        if name == "writing_lookup":
+            return _tool_text(self._writing_lookup(payload))
         if name == "search_summary_by_characters":
             return _tool_text(
                 self._get_rag_client().search_summary_characters(
@@ -264,7 +264,7 @@ class FanficMcpServer:
                     "capabilities": {"tools": {}},
                     "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
                     "instructions": (
-                        "Use tools to retrieve fanfic canon context before answering continuity or drafting questions."
+                        "Use tools to retrieve source-backed writing context before answering continuity or drafting questions."
                     ),
                 },
             }
@@ -298,7 +298,7 @@ class FanficMcpServer:
             raise SystemExit(0)
         return _error_response(-32601, f"Method not found: {method}", request_id)
 
-    def _fanfic_lookup(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def _writing_lookup(self, payload: dict[str, Any]) -> dict[str, Any]:
         question = payload["question"]
         chapter_id = _canonicalize_chapter_id(payload.get("chapter_id"))
         mode = payload.get("mode") or "scene_detail"
@@ -306,7 +306,7 @@ class FanficMcpServer:
         summary_top_k = 5
         raw_top_k = 5
         linked_top_k = 2
-        if mode == "canon_overview":
+        if mode == "source_overview":
             summary_top_k = 8
             linked_top_k = 3
         elif mode in {"exact_quote", "exact_location"}:
@@ -355,7 +355,7 @@ class FanficMcpServer:
 
 def main() -> None:
     _log("server main start")
-    server = FanficMcpServer()
+    server = WritingAssistantMcpServer()
     try:
         while True:
             request = _read_message()
@@ -416,7 +416,7 @@ def _write_message(payload: dict[str, Any]) -> None:
 
 def main() -> None:
     _log("server main start")
-    server = FanficMcpServer()
+    server = WritingAssistantMcpServer()
     while True:
         request = _read_message()
         if request is None:

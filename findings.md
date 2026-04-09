@@ -23,7 +23,7 @@ The vector DB was often blamed by symptoms, but the actual failures were usually
 
 ### 2. Exact chapter/paragraph lookup originally failed because of ID mismatch
 
-The model often generated chapter labels like `Chapter 16`, while the stored canonical metadata uses `Chapter_16`.
+The model often generated chapter labels like `Chapter 16`, while the stored normalized metadata uses `Chapter_16`.
 
 That caused exact retrieval to miss even when the model was conceptually asking for the right chapter. This was an orchestration/input normalization issue, not a retrieval-index issue.
 
@@ -95,7 +95,7 @@ Without that, it is too easy to confuse retrieval failure with orchestration fai
 ## What The Evidence Shows
 
 The most common bad sequence has been:
-1. user asks a canon question
+1. user asks a source-grounded question
 2. model answers directly without a tool
 3. backend forces retry
 4. model then calls a tool

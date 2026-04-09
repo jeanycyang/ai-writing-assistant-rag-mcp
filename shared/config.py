@@ -8,8 +8,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    database_url: str = Field(default="postgresql+psycopg://fanfic:fanfic@localhost:5432/fanfic_rag")
-    local_database_url: str = Field(default="postgresql+psycopg://fanfic:fanfic@localhost:5432/fanfic_rag")
+    database_url: str = Field(default="postgresql+psycopg://ai_writer:ai_writer@localhost:5432/ai_writing_assistance")
+    local_database_url: str = Field(default="postgresql+psycopg://ai_writer:ai_writer@localhost:5432/ai_writing_assistance")
 
     rag_api_host: str = "0.0.0.0"
     rag_api_port: int = 8001

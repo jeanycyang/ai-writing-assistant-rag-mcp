@@ -12,7 +12,7 @@ class ToolSpec:
 TOOL_SPECS: tuple[ToolSpec, ...] = (
     ToolSpec(
         name="search_episode_summaries",
-        description="Search structured episode summaries for broad canon lookup, timelines, scene overview, and high-level context. Do not use this as the first choice for exact chapter/paragraph requests.",
+        description="Search structured episode summaries for broad source-backed lookup, timelines, scene overview, and high-level context. Do not use this as the first choice for exact chapter/paragraph requests.",
         parameters={
             "type": "object",
             "properties": {

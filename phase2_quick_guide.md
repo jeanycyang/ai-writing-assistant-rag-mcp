@@ -25,7 +25,7 @@ Codex should pick up:
 
 The repo MCP server exposes these tools:
 
-- `fanfic_lookup`
+- `writing_lookup`
 - `get_summary_paragraph`
 - `get_raw_paragraph`
 - `get_chapter_summary`
@@ -33,10 +33,10 @@ The repo MCP server exposes these tools:
 
 ## Typical Prompts
 
-- `先用 fanfic 工具確認任隊長第一次被提到、但人還沒出現，是在哪一段。`
+- `先用 writing-assistance 工具確認任隊長第一次被提到、但人還沒出現，是在哪一段。`
 - `先抓 Chapter_16 的完整摘要，再幫我規劃下一段衝突。`
 - `把 Chapter_16 原文抓出來，我想比對語氣和敘事節奏。`
-- `先查 canon，再幫我寫一段新的林妍視角場景，並把你新增的創作部分和 canon 事實分開。`
+- `先查 source context，再幫我寫一段新的林妍視角場景，並把你新增的創作部分和 source-backed 事實分開。`
 
 ## RAG API
 

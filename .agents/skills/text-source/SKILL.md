@@ -1,11 +1,11 @@
 ---
 name: text-source
-description: Prepare and validate fanfiction RAG source files from local summary markdown and raw episode text. Use when working on ingestion, source parsing, source-path configuration, chapter/paragraph linkage, or OCR-derived canon files. Triggers on text-source, summary markdown, raw text, OCR text, ingestion source, Traditional Chinese, Taiwan Chinese.
+description: Prepare and validate AI writing assistance RAG source files from local summary markdown and raw episode text. Use when working on ingestion, source parsing, source-path configuration, chapter/paragraph linkage, or OCR-derived source files. Triggers on text-source, summary markdown, raw text, OCR text, ingestion source, Traditional Chinese, Taiwan Chinese.
 ---
 
 # Text Source
 
-Use this skill when the task involves locating, validating, or adapting the source documents that feed the fanfiction RAG system.
+Use this skill when the task involves locating, validating, or adapting the source documents that feed the AI writing assistance RAG system.
 
 Current source locations:
 
@@ -141,7 +141,7 @@ Handling rules:
 - Paragraph ids line up between summary and raw sources when headings exist in both.
 - Character names, tags, and key events are parsed without script conversion.
 - Malformed summary records fail loudly with the source file path called out.
-- Raw chunking preserves enough surrounding context for canon retrieval and evidence lookup.
+- Raw chunking preserves enough surrounding context for source retrieval and evidence lookup.
 
 ## When To Escalate
 

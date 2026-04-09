@@ -1,6 +1,6 @@
 import json
 
-from services.codex_mcp.server import FanficMcpServer
+from services.codex_mcp.server import WritingAssistantMcpServer
 
 
 class FakeRagClient:
@@ -91,14 +91,14 @@ class FakeRagClient:
 
 
 def test_tools_list_exposes_writing_oriented_tools() -> None:
-    server = FanficMcpServer(rag_client=FakeRagClient())
+    server = WritingAssistantMcpServer(rag_client=FakeRagClient())
 
     response = server.handle_request({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
 
     assert response is not None
     tool_names = [tool["name"] for tool in response["result"]["tools"]]
     assert tool_names == [
-        "fanfic_lookup",
+        "writing_lookup",
         "search_summary_by_characters",
         "get_summary_paragraph",
         "get_raw_paragraph",
@@ -107,8 +107,8 @@ def test_tools_list_exposes_writing_oriented_tools() -> None:
     ]
 
 
-def test_fanfic_lookup_orchestrates_summary_first_retrieval() -> None:
-    server = FanficMcpServer(rag_client=FakeRagClient())
+def test_writing_lookup_orchestrates_summary_first_retrieval() -> None:
+    server = WritingAssistantMcpServer(rag_client=FakeRagClient())
 
     response = server.handle_request(
         {
@@ -116,7 +116,7 @@ def test_fanfic_lookup_orchestrates_summary_first_retrieval() -> None:
             "id": 1,
             "method": "tools/call",
             "params": {
-                "name": "fanfic_lookup",
+                "name": "writing_lookup",
                 "arguments": {
                     "question": "任隊長第一次被提到是在哪裡？",
                     "chapter_id": "Chapter 16",
@@ -135,7 +135,7 @@ def test_fanfic_lookup_orchestrates_summary_first_retrieval() -> None:
 
 
 def test_get_chapter_text_normalizes_chapter_id() -> None:
-    server = FanficMcpServer(rag_client=FakeRagClient())
+    server = WritingAssistantMcpServer(rag_client=FakeRagClient())
 
     response = server.handle_request(
         {
@@ -152,7 +152,7 @@ def test_get_chapter_text_normalizes_chapter_id() -> None:
 
 
 def test_search_summary_by_characters_normalizes_chapter_id() -> None:
-    server = FanficMcpServer(rag_client=FakeRagClient())
+    server = WritingAssistantMcpServer(rag_client=FakeRagClient())
 
     response = server.handle_request(
         {

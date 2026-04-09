@@ -2,7 +2,7 @@
 
 ## Current Direction
 
-Phase 2 is now centered on **Codex-native fanfic writing assistance**, not on improving local-model chat quality.
+Phase 2 is now centered on **Codex-native AI writing assistance**, not on improving local-model chat quality.
 
 The implemented path is:
 
@@ -19,13 +19,13 @@ The original Phase 2 plan assumed a local chat service would remain the main pro
 That is no longer the best fit for the actual use case:
 
 - local Gemma quality is not good enough for production writing help
-- the main need is grounded canon lookup for a stronger model
+- the main need is grounded source lookup for a stronger model
 - Codex can already use tools directly through MCP
 - the repo already had retrieval contracts worth preserving
 
 So Phase 2 now focuses on:
 
-- exposing the fanfic RAG system to Codex directly
+- exposing the writing-assistance RAG system to Codex directly
 - keeping `rag-api` as the retrieval source of truth
 - removing the old chat orchestration path from the repo
 
@@ -38,7 +38,7 @@ So Phase 2 now focuses on:
 3. Codex starts the local MCP server
 4. the MCP server generates query embeddings locally
 5. the MCP server calls `rag-api`
-6. Codex uses returned evidence to answer canon questions or assist with drafting
+6. Codex uses returned evidence to answer source questions or assist with drafting
 
 ### Writing-only workspace
 
@@ -56,7 +56,7 @@ The MCP server implementation lives outside the writing workspace in:
 
 - `services/codex_mcp/server.py`
 
-This separation exists so Codex does not inspect engineering files by accident during fanfic writing sessions.
+This separation exists so Codex does not inspect engineering files by accident during AI writing assistance sessions.
 
 ## Implemented Retrieval Surface
 
@@ -78,13 +78,13 @@ These were added so Codex can work with whole-chapter context during:
 - outline planning
 - continuity checking
 - prose/style review
-- scene drafting against canon constraints
+- scene drafting against source constraints
 
 ## Implemented MCP Tools
 
 The MCP server exposes these tools to Codex:
 
-- `fanfic_lookup(question, chapter_id?, mode?)`
+- `writing_lookup(question, chapter_id?, mode?)`
 - `get_summary_paragraph(chapter_id, paragraph_id)`
 - `get_raw_paragraph(chapter_id, paragraph_id)`
 - `get_chapter_summary(chapter_id)`
@@ -92,7 +92,7 @@ The MCP server exposes these tools to Codex:
 
 ### Tool intent
 
-- `fanfic_lookup`: broad canon lookup and summary-first evidence gathering
+- `writing_lookup`: broad source lookup and summary-first evidence gathering
 - `get_summary_paragraph`: exact structured summary paragraph lookup
 - `get_raw_paragraph`: exact raw paragraph lookup
 - `get_chapter_summary`: full chapter summary in paragraph order
@@ -142,13 +142,13 @@ Important implementation detail:
 
 `AGENTS.md` now defines the default working rules for Codex in this repo:
 
-- use MCP tools before answering canon questions from memory
+- use MCP tools before answering source questions from memory
 - use chapter-level tools for planning and revision
 - use exact paragraph tools for quote verification and precise references
-- separate canon-backed facts from newly invented prose
+- separate source-backed facts from newly invented prose
 - cite chapter and paragraph when the evidence includes them
 
-The writing-only workspace also has its own `AGENTS.md` and `PROMPTS.md` tuned for drafting and canon-check flows rather than repo engineering.
+The writing-only workspace also has its own `AGENTS.md` and `PROMPTS.md` tuned for drafting and source-check flows rather than repo engineering.
 
 ## MCP Handshake Notes
 

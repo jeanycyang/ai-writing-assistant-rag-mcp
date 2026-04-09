@@ -15,7 +15,7 @@ The retrieval policy is summary-first:
 2. if needed, fetch linked original text or search raw text directly
 3. answer only from retrieved evidence
 
-This keeps canon lookup compact and fast while still allowing fallback to scene-level wording and nuance.
+This keeps source-backed lookup compact and fast while still allowing fallback to scene-level wording and nuance.
 
 ## Python Setup
 
@@ -42,7 +42,7 @@ The detailed production import procedure is in [Quick Start: Import Real OCR Dat
 
 ## Codex Writing Workspace
 
-For fanfic writing sessions, open [codex-writing-workspace/README.md](/Users/jeanycyang/Documents/fanfiction-rag/codex-writing-workspace/README.md) instead of the repo root.
+For AI writing assistance sessions, open [codex-writing-workspace/README.md](/Users/jeanycyang/Documents/fanfiction-rag/codex-writing-workspace/README.md) instead of the repo root.
 
 That workspace is intentionally documentation-only:
 
@@ -55,7 +55,7 @@ It does not contain Python or shell launcher files, so Codex is less likely to i
 The workspace MCP config starts the server from the parent repo:
 
 ```toml
-[mcp_servers.fanfic_rag]
+[mcp_servers.ai_writing_assistance]
 command = "../venv/bin/python"
 args = ["-u", "../services/codex_mcp/server.py"]
 cwd = "."
@@ -82,10 +82,10 @@ If you are debugging Codex MCP startup, inspect:
 
 Useful log markers from `services/codex_mcp/server.py` are:
 
-- `fanfic_rag mcp: server main start`
-- `fanfic_rag mcp: received initialize`
-- `fanfic_rag mcp: writing response id=...`
-- `fanfic_rag mcp: flushed response id=...`
+- `ai_writing_assistance mcp: server main start`
+- `ai_writing_assistance mcp: received initialize`
+- `ai_writing_assistance mcp: writing response id=...`
+- `ai_writing_assistance mcp: flushed response id=...`
 
 ## Start the Stack
 
@@ -274,7 +274,7 @@ Codex CLI and the Codex IDE extension will pick up the project-scoped MCP server
 
 The MCP server exposes these tools:
 
-- `fanfic_lookup`
+- `writing_lookup`
 - `get_summary_paragraph`
 - `get_raw_paragraph`
 - `get_chapter_summary`
@@ -284,10 +284,10 @@ If you want Codex to avoid the implementation files and stay focused on writing,
 
 Typical Codex prompts:
 
-- `先用 fanfic 工具確認任隊長第一次被提到、但人還沒出現，是在哪一段。`
+- `先用 writing-assistance 工具確認任隊長第一次被提到、但人還沒出現，是在哪一段。`
 - `先抓 Chapter_16 的完整摘要，再幫我規劃下一段衝突。`
 - `把 Chapter_16 原文抓出來，我想比對語氣和敘事節奏。`
-- `先查 canon，再幫我寫一段新的林妍視角場景，並把你新增的創作部分和 canon 事實分開。`
+- `先查 source context，再幫我寫一段新的林妍視角場景，並把你新增的創作部分和 source-backed 事實分開。`
 
 ## Health Checks
 
@@ -331,7 +331,7 @@ docker compose up --build
 ## Current TODOs
 
 - continue real writing-flow validation of the Codex MCP tools across outline, drafting, and continuity-check prompts
-- tune the `fanfic_lookup` output shape so Codex gets enough evidence without overly large payloads
+- tune the `writing_lookup` output shape so Codex gets enough evidence without overly large payloads
 
 ## Future Extension Path
 
