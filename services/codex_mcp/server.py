@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import json
 import re
-import sys
-import time
-import traceback
 import signal
+import sys
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -57,7 +56,7 @@ def _error_response(code: int, message: str, request_id: Any) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
 
 
-def _read_message() -> dict[str, Any] | None:
+def _read_stdio_message() -> dict[str, Any] | None:
     first_line = sys.stdin.buffer.readline()
     if not first_line:
         return None
@@ -86,7 +85,7 @@ def _read_message() -> dict[str, Any] | None:
     return json.loads(body.decode("utf-8"))
 
 
-def _write_message(payload: dict[str, Any]) -> None:
+def _write_stdio_message(payload: dict[str, Any]) -> None:
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     _log(f"writing response id={payload.get('id')} length={len(body)}")
     sys.stdout.buffer.write(body)
@@ -270,7 +269,7 @@ class WritingAssistantMcpServer:
             }
         if method == "notifications/initialized":
             return None
-        if method.startswith("notifications/"):
+        if method and method.startswith("notifications/"):
             return None
         if method == "ping":
             return {"jsonrpc": "2.0", "id": request_id, "result": {}}
@@ -289,7 +288,7 @@ class WritingAssistantMcpServer:
                 return _error_response(-32602, f"Missing required argument: {exc.args[0]}", request_id)
             except ToolError as exc:
                 return _error_response(-32601, str(exc), request_id)
-            except Exception as exc:  # pragma: no cover - defensive protocol boundary
+            except Exception as exc:  # pragma: no cover
                 return _error_response(-32000, str(exc), request_id)
             return {"jsonrpc": "2.0", "id": request_id, "result": result}
         if method == "shutdown":
@@ -358,7 +357,7 @@ def main() -> None:
     server = WritingAssistantMcpServer()
     try:
         while True:
-            request = _read_message()
+            request = _read_stdio_message()
             if request is None:
                 if server._initialized:
                     _log("stdin closed after initialize; keeping process alive until terminated")
@@ -367,64 +366,11 @@ def main() -> None:
                 return
             response = server.handle_request(request)
             if response is not None:
-                _write_message(response)
+                _write_stdio_message(response)
     except BaseException as exc:
         _log(f"fatal error: {exc.__class__.__name__}: {exc}")
         traceback.print_exc(file=sys.stderr)
         raise
-
-
-if __name__ == "__main__":
-    main()
-
-
-def _read_message() -> dict[str, Any] | None:
-    content_length: int | None = None
-    while True:
-        line = sys.stdin.buffer.readline()
-        if not line:
-            _log("stdin closed before next message")
-            return None
-        if line in {b"\r\n", b"\n"}:
-            break
-        header = line.decode("utf-8").strip()
-        if header.lower().startswith("content-length:"):
-            content_length = int(header.split(":", 1)[1].strip())
-
-    if content_length is None:
-        _log("missing Content-Length header")
-        raise RuntimeError("Missing Content-Length header")
-    body = sys.stdin.buffer.read(content_length)
-    if not body:
-        _log("empty message body")
-        return None
-    _log(f"read message body length={content_length}")
-    return json.loads(body.decode("utf-8"))
-
-
-def _write_message(payload: dict[str, Any]) -> None:
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    _log(
-        "writing response"
-        + (f" method_result_id={payload.get('id')}" if isinstance(payload, dict) else "")
-        + f" length={len(body)}"
-    )
-    sys.stdout.buffer.write(f"Content-Length: {len(body)}\r\n\r\n".encode("ascii"))
-    sys.stdout.buffer.write(body)
-    sys.stdout.buffer.flush()
-
-
-def main() -> None:
-    _log("server main start")
-    server = WritingAssistantMcpServer()
-    while True:
-        request = _read_message()
-        if request is None:
-            _log("server main exit")
-            return
-        response = server.handle_request(request)
-        if response is not None:
-            _write_message(response)
 
 
 if __name__ == "__main__":

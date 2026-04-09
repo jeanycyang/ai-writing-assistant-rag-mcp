@@ -1,6 +1,9 @@
 import json
 
+from fastapi.testclient import TestClient
+
 from services.codex_mcp.server import WritingAssistantMcpServer
+from services.rag_api.app.main import app, get_mcp_server
 
 
 class FakeRagClient:
@@ -177,3 +180,39 @@ def test_search_summary_by_characters_normalizes_chapter_id() -> None:
     assert response is not None
     payload = json.loads(response["result"]["content"][0]["text"])
     assert payload["hits"][0]["chapter_id"] == "Chapter_16"
+
+
+def test_http_mcp_endpoint_serves_initialize_and_tools_list() -> None:
+    app.dependency_overrides[get_mcp_server] = lambda: WritingAssistantMcpServer(rag_client=FakeRagClient())
+    client = TestClient(app)
+
+    initialize_response = client.post(
+        "/mcp",
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {"protocolVersion": "2024-11-05"},
+        },
+    )
+    tools_response = client.post("/mcp", json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+
+    app.dependency_overrides.clear()
+
+    assert initialize_response.status_code == 200
+    assert initialize_response.json()["result"]["serverInfo"]["name"] == "ai_writing_assistance"
+    assert tools_response.status_code == 200
+    tool_names = [tool["name"] for tool in tools_response.json()["result"]["tools"]]
+    assert "writing_lookup" in tool_names
+
+
+def test_http_mcp_endpoint_accepts_notifications_without_response_body() -> None:
+    app.dependency_overrides[get_mcp_server] = lambda: WritingAssistantMcpServer(rag_client=FakeRagClient())
+    client = TestClient(app)
+
+    response = client.post("/mcp", json={"jsonrpc": "2.0", "method": "notifications/initialized"})
+
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 202
+    assert response.text == ""

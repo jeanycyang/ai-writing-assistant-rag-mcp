@@ -1,7 +1,11 @@
-from fastapi import Depends, FastAPI
+from functools import lru_cache
+from typing import Any
+
+from fastapi import Body, Depends, FastAPI, Response, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from services.codex_mcp.server import WritingAssistantMcpServer
 from services.rag_api.app import service
 from shared.db import get_db
 from shared.schemas import (
@@ -25,6 +29,11 @@ from shared.schemas import (
 app = FastAPI(title="ai-writing-assistance-rag-api")
 
 
+@lru_cache(maxsize=1)
+def get_mcp_server() -> WritingAssistantMcpServer:
+    return WritingAssistantMcpServer()
+
+
 @app.get("/healthz")
 def healthz() -> dict[str, str]:
     return {"status": "ok"}
@@ -34,6 +43,17 @@ def healthz() -> dict[str, str]:
 def readyz(db: Session = Depends(get_db)) -> dict[str, str]:
     db.execute(text("SELECT 1"))
     return {"status": "ok"}
+
+
+@app.post("/mcp")
+def mcp(
+    request: dict[str, Any] = Body(...),
+    server: WritingAssistantMcpServer = Depends(get_mcp_server),
+):
+    response = server.handle_request(request)
+    if response is None:
+        return Response(status_code=status.HTTP_202_ACCEPTED)
+    return response
 
 
 @app.post("/search/summaries", response_model=SummarySearchResponse)

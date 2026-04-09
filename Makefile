@@ -1,6 +1,6 @@
 PYTHON ?= python3.12
 
-.PHONY: venv install dev-install up down logs migrate ingest-sample cleanup-sample-data test
+.PHONY: venv install dev-install up down logs migrate ingest-sample cleanup-sample-data test funnel-up funnel-status funnel-url funnel-down
 
 venv:
 	test -d venv || $(PYTHON) -m venv venv
@@ -31,3 +31,15 @@ cleanup-sample-data:
 
 test:
 	source venv/bin/activate && pytest
+
+funnel-up:
+	./scripts/tailscale_funnel.sh up
+
+funnel-status:
+	./scripts/tailscale_funnel.sh status
+
+funnel-url:
+	./scripts/tailscale_funnel.sh url
+
+funnel-down:
+	./scripts/tailscale_funnel.sh down

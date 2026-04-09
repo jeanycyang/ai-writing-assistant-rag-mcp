@@ -31,6 +31,31 @@ The repo MCP server exposes these tools:
 - `get_chapter_summary`
 - `get_chapter_text`
 
+For local Codex sessions, those tools are reached over stdio from `.codex/config.toml`.
+
+For remote HTTPS access, `rag-api` also exposes:
+
+- `POST /mcp`
+
+Preferred public transport:
+
+- Tailscale Funnel
+
+Helper commands:
+
+```bash
+make funnel-up
+make funnel-status
+make funnel-url
+make funnel-down
+```
+
+Expected public shape:
+
+```text
+https://<device-name>.<tailnet>.ts.net/mcp
+```
+
 ## Typical Prompts
 
 - `先用 writing-assistance 工具確認任隊長第一次被提到、但人還沒出現，是在哪一段。`

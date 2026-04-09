@@ -6,7 +6,7 @@ Local-first retrieval-augmented generation for AI writing assistance on macOS. L
 
 - `postgres`: PostgreSQL with `pgvector` for structured summary embeddings and raw-text embeddings.
 - `rag-api`: FastAPI retrieval service with vendor-neutral HTTP contracts.
-- `services/codex_mcp/server.py`: local STDIO MCP server that exposes writing-oriented retrieval tools to Codex.
+- `services/codex_mcp/server.py`: MCP protocol handler used by the local STDIO server and the HTTP MCP endpoint.
 - `scripts/ingest_data.py`: local ingestion entrypoint for summary markdown and raw episode text.
 
 The retrieval policy is summary-first:
@@ -65,7 +65,10 @@ tool_timeout_sec = 120
 
 ## MCP Notes
 
-The Codex integration is a local STDIO MCP server, not an HTTP MCP server.
+The Codex integration can run in two transports:
+
+- local STDIO via `services/codex_mcp/server.py`
+- remote HTTP via `POST /mcp` on `rag-api`
 
 Important implementation details that proved necessary:
 
@@ -86,6 +89,61 @@ Useful log markers from `services/codex_mcp/server.py` are:
 - `ai_writing_assistance mcp: received initialize`
 - `ai_writing_assistance mcp: writing response id=...`
 - `ai_writing_assistance mcp: flushed response id=...`
+
+### Remote MCP Over HTTPS
+
+The preferred public transport is Tailscale Funnel in front of `rag-api`.
+
+The existing `rag-api` service exposes MCP JSON-RPC over HTTP at:
+
+- `POST /mcp`
+
+With Funnel, the public MCP URL becomes:
+
+```text
+https://<device-name>.<tailnet>.ts.net/mcp
+```
+
+The hostname is stable as long as the device name stays the same. If you want a cleaner fixed hostname, rename the device in Tailscale first.
+
+The helper script at [scripts/tailscale_funnel.sh](/Users/jeanycyang/Documents/fanfiction-rag/scripts/tailscale_funnel.sh) manages this flow:
+
+```bash
+make funnel-up
+make funnel-status
+make funnel-url
+make funnel-down
+```
+
+Default behavior:
+
+- proxies local `http://127.0.0.1:${RAG_API_PORT:-8001}`
+- publishes it on Funnel HTTPS port `443`
+- prints the fixed `*.ts.net` URL and the `/mcp` endpoint
+
+Optional overrides can go in `.env`:
+
+```bash
+TAILSCALE_FUNNEL_TARGET_HOST=127.0.0.1
+TAILSCALE_FUNNEL_TARGET_PORT=8001
+TAILSCALE_FUNNEL_HTTPS_PORT=443
+TAILSCALE_MCP_PATH=/mcp
+```
+
+Prerequisites:
+
+- Tailscale is installed and logged in on this machine
+- MagicDNS and HTTPS are enabled for the tailnet
+- Funnel is allowed for the tailnet and this device
+- `rag-api` is healthy on the local target port
+
+Example initialize request:
+
+```bash
+curl -s https://<device-name>.<tailnet>.ts.net/mcp \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"remote-client","version":"0.1.0"}}}'
+```
 
 ## Start the Stack
 

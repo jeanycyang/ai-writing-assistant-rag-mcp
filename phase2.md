@@ -8,7 +8,9 @@ The implemented path is:
 
 - `postgres` for storage
 - `rag-api` for retrieval
-- a local STDIO MCP server for Codex at `services/codex_mcp/server.py`
+- a shared MCP protocol handler at `services/codex_mcp/server.py`
+- local STDIO MCP for Codex via `.codex/config.toml`
+- remote HTTP MCP at `POST /mcp` on `rag-api`
 - repo-scoped Codex config in `.codex/config.toml`
 - repo guidance in `AGENTS.md`
 
@@ -39,6 +41,13 @@ So Phase 2 now focuses on:
 4. the MCP server generates query embeddings locally
 5. the MCP server calls `rag-api`
 6. Codex uses returned evidence to answer source questions or assist with drafting
+
+### Remote HTTPS path
+
+1. `rag-api` exposes `POST /mcp`
+2. Tailscale Funnel publishes `rag-api` on a stable `*.ts.net` hostname
+3. remote clients call `https://<device-name>.<tailnet>.ts.net/mcp`
+4. the same MCP protocol handler serves both stdio and HTTP transports
 
 ### Writing-only workspace
 
@@ -150,19 +159,21 @@ Important implementation detail:
 
 The writing-only workspace also has its own `AGENTS.md` and `PROMPTS.md` tuned for drafting and source-check flows rather than repo engineering.
 
-## MCP Handshake Notes
+## MCP Transport Notes
 
-The MCP server integration required several practical fixes before Codex would attach reliably.
+The MCP integration required several practical fixes before Codex would attach reliably.
 
 The final state worth documenting is:
 
-- MCP transport is local STDIO
+- local Codex transport is STDIO
+- remote HTTPS transport is `POST /mcp` on `rag-api`
 - the server process is launched with unbuffered Python: `python -u`
 - the server must not exit immediately after replying to `initialize`
 - stdout is reserved for protocol messages only
 - stderr is used for logs and handshake debugging
 - the server writes newline-delimited JSON responses for STDIO
 - the server accepts input defensively during startup
+- Tailscale Funnel is the preferred public transport for a stable `*.ts.net` hostname
 
 Useful handshake log markers are:
 
@@ -206,6 +217,7 @@ Current implementation was verified with:
 
 - targeted tests for the new chapter retrieval endpoints
 - targeted tests for the new MCP server
+- targeted tests for the HTTP MCP endpoint
 - full repo test run
 - Compose service checks showing default services: `postgres`, `rag-api`
 - direct MCP handshake probes against `services/codex_mcp/server.py`
