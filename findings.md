@@ -14,8 +14,6 @@ The recurring failure pattern is:
 
 ### 1. The core weakness is the LLM control loop
 
-The largest source of bad behavior is [services/agent_api/app/chat.py](/Users/jeanycyang/Documents/fanfiction-rag/services/agent_api/app/chat.py), especially the tool loop and verifier path.
-
 The vector DB was often blamed by symptoms, but the actual failures were usually upstream:
 - no tool call at all
 - wrong tool family selected

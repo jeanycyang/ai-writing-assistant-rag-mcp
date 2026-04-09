@@ -4,7 +4,7 @@
 
 Phase 2 is now centered on **Codex-native fanfic writing assistance**, not on improving local-model chat quality.
 
-The implemented default path is:
+The implemented path is:
 
 - `postgres` for storage
 - `rag-api` for retrieval
@@ -12,11 +12,9 @@ The implemented default path is:
 - repo-scoped Codex config in `.codex/config.toml`
 - repo guidance in `AGENTS.md`
 
-`agent-api` still exists, but it is now a **legacy opt-in service** and is suspended from default Docker startup.
-
 ## Why The Direction Changed
 
-The original Phase 2 plan assumed a local `agent-api` plus Ollama chat experience would remain the main product path.
+The original Phase 2 plan assumed a local chat service would remain the main product path.
 
 That is no longer the best fit for the actual use case:
 
@@ -29,7 +27,7 @@ So Phase 2 now focuses on:
 
 - exposing the fanfic RAG system to Codex directly
 - keeping `rag-api` as the retrieval source of truth
-- reducing reliance on Ollama and legacy chat orchestration
+- removing the old chat orchestration path from the repo
 
 ## Implemented Architecture
 
@@ -59,14 +57,6 @@ The MCP server implementation lives outside the writing workspace in:
 - `services/codex_mcp/server.py`
 
 This separation exists so Codex does not inspect engineering files by accident during fanfic writing sessions.
-
-### Legacy path
-
-`agent-api` remains available only behind the Docker Compose profile:
-
-- `legacy-agent`
-
-Default startup does **not** include it.
 
 ## Implemented Retrieval Surface
 
@@ -120,8 +110,7 @@ This matters because:
 
 - `rag-api` still stays retrieval-only
 - query embeddings are still generated outside `rag-api`
-- the new MCP path can search summaries/raw without depending on `agent-api`
-- legacy `agent-api` can still reuse the same client
+- the MCP path can search summaries/raw without depending on a separate chat service
 
 ## Chapter Retrieval Notes
 
@@ -191,12 +180,10 @@ These logs were important for distinguishing:
 
 ## Docker Compose State
 
-The default Docker stack is now:
+The Docker stack is now:
 
 - `postgres`
 - `rag-api`
-
-`agent-api` is suspended by default in `docker-compose.yml`.
 
 ### Default startup
 
@@ -204,32 +191,14 @@ The default Docker stack is now:
 docker compose up --build
 ```
 
-### Explicit legacy startup
-
-```bash
-docker compose --profile legacy-agent up --build
-```
-
-## What Is Still Legacy
-
-These pieces still exist, but they are not the recommended path:
-
-- `agent-api`
-- local web chat UI under `agent-api`
-- Ollama-backed `/chat`
-- session-oriented legacy chat flow
-
-They remain in the repo for compatibility and manual testing only.
-
 ## Acceptance State
 
 Phase 2 is now considered implemented when these conditions hold:
 
 - Codex can load the repo and see the MCP tools
 - chapter-level summary and raw retrieval are available through `rag-api`
-- default Docker startup does not start `agent-api`
 - Codex can use the repo-level instructions in `AGENTS.md`
-- the shared vectorized client works without `agent-api`
+- the shared vectorized client works without a separate chat service
 
 ## Verification Summary
 
@@ -238,8 +207,6 @@ Current implementation was verified with:
 - targeted tests for the new chapter retrieval endpoints
 - targeted tests for the new MCP server
 - full repo test run
-- Compose service checks showing:
-  - default services: `postgres`, `rag-api`
-  - legacy profile services: `postgres`, `rag-api`, `agent-api`
+- Compose service checks showing default services: `postgres`, `rag-api`
 - direct MCP handshake probes against `services/codex_mcp/server.py`
 - Codex log inspection showing `initialize` receipt and response flush

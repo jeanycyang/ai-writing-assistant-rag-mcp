@@ -13,17 +13,7 @@ class Settings(BaseSettings):
 
     rag_api_host: str = "0.0.0.0"
     rag_api_port: int = 8001
-    agent_api_host: str = "0.0.0.0"
-    agent_api_port: int = 8002
     rag_api_url: str = "http://localhost:8001"
-
-    llm_provider: str = "ollama"
-    ollama_base_url: str = "http://host.docker.internal:11434"
-    ollama_model: str = "hauhau-gemma4-e4b-q4km"
-    ollama_request_timeout: float = 120.0
-    ollama_health_timeout: float = 5.0
-    ollama_keep_alive: str = "0s"
-    ollama_num_predict: int = 160
 
     embedding_provider: str = "sentence_transformers"
     embedding_model: str = "BAAI/bge-m3"

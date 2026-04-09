@@ -14,8 +14,6 @@ This starts:
 - `postgres`
 - `rag-api`
 
-It does **not** start `agent-api`.
-
 ## Codex Setup
 
 Open the repo in Codex CLI or the Codex IDE extension.
@@ -73,24 +71,7 @@ curl -sS -X POST http://localhost:8001/retrieve/raw-chapter \
   -d '{"chapter_id":"Chapter_16"}'
 ```
 
-## Legacy `agent-api`
-
-Start the legacy chat service only if you explicitly need it:
-
-```bash
-docker compose --profile legacy-agent up --build
-```
-
-Legacy health checks:
-
-```bash
-curl -sS http://localhost:8002/healthz
-curl -sS http://localhost:8002/readyz
-```
-
 ## Notes
 
-- The recommended writing workflow is Codex + MCP, not `agent-api`.
 - Query embeddings are generated outside `rag-api` by the shared client used by the MCP server.
 - Full chapter raw text is reconstructed from overlapping stored chunks before being returned.
-- `agent-api` is suspended by default and should not start unless the `legacy-agent` profile is requested.
