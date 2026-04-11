@@ -1,6 +1,6 @@
 # AI Writing Assistance MCP RAG
 
-A retrieval-augmented generation for AI writing assistance.
+A retrieval-augmented generation system for AI writing assistance.
 
 ## Architecture
 
@@ -8,18 +8,18 @@ A retrieval-augmented generation for AI writing assistance.
 - `rag-api`: FastAPI retrieval service with vendor-neutral HTTP contracts.
 
 ## Preparation
-- `scripts/ingest_data.py`: local ingestion entrypoint for summary markdown and raw episode text.
-- See `Ingest Data`
+- `scripts/ingest_data.py`: Local ingestion entry point for summary markdown and raw episode text.
+- See [Ingest Data](#ingest-data)
 
 ## Usage
 
 ### For Local Client
 - `services/codex_mcp/server.py`: MCP protocol handler used by the local STDIO server and the HTTP MCP endpoint.
-- See `## Codex Writing Workspace`
+- See [Codex Writing Workspace](#codex-writing-workspace)
 
 ### For Remote AI Services
-- `make funnel-up` for starting the TailScale Funnel service. Then setup the MCP integration on your remote AI provider.
-- See `## Remote MCP Over HTTPS`
+- Run `make funnel-up` to start the Tailscale Funnel service. Then set up the MCP integration on your remote AI provider.
+- See [Remote MCP Over HTTPS](#remote-mcp-over-https)
 
 ## Python Setup
 
@@ -67,7 +67,7 @@ make funnel-down
 
 Default behavior:
 
-- proxies local `http://127.0.0.1:${RAG_API_PORT:-8001}`
+- proxies to local `http://127.0.0.1:${RAG_API_PORT:-8001}`
 - publishes it on Funnel HTTPS port `443`
 - prints the fixed `*.ts.net` URL and the `/mcp` endpoint
 
@@ -88,13 +88,13 @@ curl -s https://<device-name>.<tailnet>.ts.net/mcp \
 
 ## Ingest Data
 
-TODO: Different databases for different works. Support multiple works.
+TODO: Use different databases for different works. Support multiple works.
 
 Production rule:
 
 - `data/sample` is test/demo data only
 - do not use `data/sample` for production ingestion
-- for production, always ingest from the real OCR roots explicitly or set `.env` to the real OCR roots
+- for production, always ingest from the real OCR roots explicitly, or set `.env` to those real OCR roots
 
 If sample/demo records were already imported into PostgreSQL, remove them before production import:
 
@@ -121,9 +121,9 @@ The ingestion pipeline:
 - builds retrieval-friendly `embedding_text`
 - chunks raw text while preserving chapter and paragraph linkage
 - computes embeddings with `sentence-transformers`
-- upserts records by stable external ids with `source_hash` stored for inspection
+- upserts records by stable external IDs, with `source_hash` stored for inspection
 
-Default embedding choice: `BAAI/bge-m3`. It is multilingual and practical for Traditional Chinese (Taiwan) text on a Mac-centric local setup. The embedding layer is abstracted so a different provider can be added later without changing the retrieval API.
+Default embedding choice: `BAAI/bge-m3`. It is multilingual and practical for Traditional Chinese (Taiwan) text in a Mac-centric local setup. The embedding layer is abstracted so a different provider can be added later without changing the retrieval API.
 
 Query embeddings are generated outside `rag-api`. The shared vectorized client is used by the local MCP server, so `rag-api` stays retrieval-only and does not depend on PyTorch.
 
@@ -133,10 +133,6 @@ Query embeddings are generated outside `rag-api`. The shared vectorized client i
 source venv/bin/activate
 pytest
 ```
-
-Current local status:
-
-- full test suite passes: `32 passed`
 
 ## Reset and Rebuild
 
