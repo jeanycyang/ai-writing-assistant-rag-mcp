@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import signal
 import sys
@@ -12,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 SERVER_NAME = "ai_writing_assistance"
 SERVER_VERSION = "0.1.0"
 PROTOCOL_VERSION = "2024-11-05"
+WORK_ENV_VAR = "AI_WRITING_WORK"
 ROOT = Path(__file__).resolve().parents[2]
 
 if str(ROOT) not in sys.path:
@@ -95,8 +97,9 @@ def _write_stdio_message(payload: dict[str, Any]) -> None:
 
 
 class WritingAssistantMcpServer:
-    def __init__(self, rag_client: "RagApiClient | None" = None) -> None:
+    def __init__(self, rag_client: "RagApiClient | None" = None, work: str | None = None) -> None:
         self._rag_client = rag_client
+        self._work = work or os.getenv(WORK_ENV_VAR)
         self._initialized = False
         self._tools = {
             tool.name: tool
@@ -189,7 +192,7 @@ class WritingAssistantMcpServer:
         if self._rag_client is None:
             from shared.rag_client import RagApiClient
 
-            self._rag_client = RagApiClient()
+            self._rag_client = RagApiClient(work=self._work)
         return self._rag_client
 
     def list_tools(self) -> dict[str, Any]:

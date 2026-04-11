@@ -51,6 +51,7 @@ The preferred public transport is Tailscale Funnel in front of `rag-api`.
 The existing `rag-api` service exposes MCP JSON-RPC over HTTP at:
 
 - `POST /mcp`
+- `POST /mcp/{work}`
 
 With Funnel, the public MCP URL becomes:
 
@@ -90,6 +91,16 @@ curl -s https://<device-name>.<tailnet>.ts.net/mcp \
 
 TODO: Use different databases for different works. Support multiple works.
 
+Current implementation direction:
+
+- keep the default database on the existing endpoints
+- named work endpoints reuse the same PostgreSQL server/credentials and only switch the database name
+- `/mcp/work_id_1` uses the `work_id_1` database, `/mcp/work_id_2` uses the `work_id_2` database
+- `AI_WRITING_WORK=work_id_1` binds the local STDIO MCP server to the `work_id_1` database
+- use `POST /mcp/{work}` to bind MCP to one work database without exposing work selection to the model
+- use `POST /works/{work}/...` retrieval endpoints for direct HTTP access
+- use `python scripts/ingest_data.py --work <work>` to ingest into a named work database
+
 Production rule:
 
 - `data/sample` is test/demo data only
@@ -112,6 +123,7 @@ make cleanup-sample-data
 ```bash
 source venv/bin/activate
 python scripts/ingest_data.py --summary-dir data/sample/summaries --raw-dir data/sample/raw
+python scripts/ingest_data.py --work sample --summary-dir data/sample/summaries --raw-dir data/sample/raw
 ```
 
 The ingestion pipeline:

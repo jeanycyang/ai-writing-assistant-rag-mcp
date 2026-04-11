@@ -3,6 +3,7 @@ from functools import lru_cache
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
 
 
 class Settings(BaseSettings):
@@ -31,6 +32,11 @@ class Settings(BaseSettings):
         if os.getenv("SERVICE_NAME"):
             return self.database_url
         return self.local_database_url
+
+    def database_url_for_work(self, work: str | None = None) -> str:
+        if not work:
+            return self.effective_database_url
+        return make_url(self.effective_database_url).set(database=work).render_as_string(hide_password=False)
 
 
 @lru_cache(maxsize=1)

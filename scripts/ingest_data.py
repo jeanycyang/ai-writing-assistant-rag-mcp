@@ -10,12 +10,13 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from shared.db import SessionLocal
+from shared.db import create_session
 from shared.ingestion import ingest_directories
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Ingest summary and raw markdown files into PostgreSQL.")
+    parser.add_argument("--work", default=None, help="Named work/database to target.")
     parser.add_argument("--summary-dir", default=None, help="Directory containing summary markdown files.")
     parser.add_argument("--raw-dir", default=None, help="Directory containing raw markdown files.")
     parser.add_argument(
@@ -35,7 +36,7 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    session = SessionLocal()
+    session = create_session(args.work)
     try:
         result = ingest_directories(
             session,

@@ -9,10 +9,16 @@ from shared.config import get_settings
 
 
 class RagApiClient:
-    def __init__(self) -> None:
+    def __init__(self, work: str | None = None) -> None:
         self._settings = get_settings()
+        self._work = work
         self._client = httpx.Client(base_url=self._settings.rag_api_url, timeout=60.0)
         self._embedding_provider = None
+
+    def _path(self, path: str) -> str:
+        if self._work:
+            return f"/works/{self._work}{path}"
+        return path
 
     def _get_embedding_provider(self):
         if self._embedding_provider is None:
@@ -35,7 +41,7 @@ class RagApiClient:
         embedding_elapsed_ms = round((perf_counter() - embedding_started_at) * 1000, 2)
 
         request_started_at = perf_counter()
-        response = self._client.post(path, json=enriched_payload)
+        response = self._client.post(self._path(path), json=enriched_payload)
         response.raise_for_status()
         request_elapsed_ms = round((perf_counter() - request_started_at) * 1000, 2)
         return response.json(), {
@@ -87,7 +93,7 @@ class RagApiClient:
 
     def search_summary_characters(self, payload: dict[str, Any]) -> dict[str, Any]:
         response = self._client.post(
-            "/search/summary-characters",
+            self._path("/search/summary-characters"),
             json={
                 "characters": payload.get("characters", []),
                 "operator": payload.get("operator", "or"),
@@ -102,13 +108,13 @@ class RagApiClient:
         return response.json()
 
     def get_linked_raw(self, payload: dict[str, Any]) -> dict[str, Any]:
-        response = self._client.post("/retrieve/linked-raw", json=self._normalize_linked_raw_payload(payload))
+        response = self._client.post(self._path("/retrieve/linked-raw"), json=self._normalize_linked_raw_payload(payload))
         response.raise_for_status()
         return response.json()
 
     def get_summary_paragraph(self, payload: dict[str, Any]) -> dict[str, Any]:
         response = self._client.post(
-            "/retrieve/summary-paragraph",
+            self._path("/retrieve/summary-paragraph"),
             json={
                 "chapter_id": payload["chapter_id"],
                 "paragraph_id": payload["paragraph_id"],
@@ -119,7 +125,7 @@ class RagApiClient:
 
     def get_summary_chapter(self, payload: dict[str, Any]) -> dict[str, Any]:
         response = self._client.post(
-            "/retrieve/summary-chapter",
+            self._path("/retrieve/summary-chapter"),
             json={"chapter_id": payload["chapter_id"]},
         )
         response.raise_for_status()
@@ -127,7 +133,7 @@ class RagApiClient:
 
     def get_raw_paragraph(self, payload: dict[str, Any]) -> dict[str, Any]:
         response = self._client.post(
-            "/retrieve/raw-paragraph",
+            self._path("/retrieve/raw-paragraph"),
             json={
                 "chapter_id": payload["chapter_id"],
                 "paragraph_id": payload["paragraph_id"],
@@ -138,7 +144,7 @@ class RagApiClient:
 
     def get_raw_chapter(self, payload: dict[str, Any]) -> dict[str, Any]:
         response = self._client.post(
-            "/retrieve/raw-chapter",
+            self._path("/retrieve/raw-chapter"),
             json={"chapter_id": payload["chapter_id"]},
         )
         response.raise_for_status()

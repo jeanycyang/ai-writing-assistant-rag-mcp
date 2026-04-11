@@ -1,4 +1,5 @@
 [mcp_servers.ai_writing_assistance]
+# Set `AI_WRITING_WORK=work_id_1` before launching Codex to bind this STDIO MCP server to that database.
 command = "../venv/bin/python"
 args = ["-u", "../services/codex_mcp/server.py"]
 cwd = "."

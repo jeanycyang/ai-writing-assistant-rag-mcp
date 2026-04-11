@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from services.codex_mcp.server import WritingAssistantMcpServer
 from services.rag_api.app.main import app, get_mcp_server
+from shared.rag_client import RagApiClient
 
 
 class FakeRagClient:
@@ -200,6 +201,23 @@ def test_search_summary_by_characters_normalizes_chapter_id() -> None:
     assert payload["hits"][0]["chapter_id"] == "Chapter_16"
 
 
+def test_server_uses_env_work_for_rag_client(monkeypatch) -> None:
+    monkeypatch.setenv("AI_WRITING_WORK", "work_id_1")
+
+    captured = {}
+
+    class FakeWorkAwareRagClient:
+        def __init__(self, work=None):
+            captured["work"] = work
+
+    monkeypatch.setattr("shared.rag_client.RagApiClient", FakeWorkAwareRagClient)
+
+    server = WritingAssistantMcpServer()
+    server._get_rag_client()
+
+    assert captured["work"] == "work_id_1"
+
+
 def test_http_mcp_endpoint_serves_initialize_and_tools_list() -> None:
     app.dependency_overrides[get_mcp_server] = lambda: WritingAssistantMcpServer(rag_client=FakeRagClient())
     client = TestClient(app)
@@ -234,3 +252,30 @@ def test_http_mcp_endpoint_accepts_notifications_without_response_body() -> None
 
     assert response.status_code == 202
     assert response.text == ""
+
+
+def test_http_mcp_work_endpoint_uses_work_bound_server(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "services.rag_api.app.main.get_mcp_server_for_work",
+        lambda work: WritingAssistantMcpServer(rag_client=FakeRagClient(), work=work),
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/mcp/sample",
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "get_chapter_text", "arguments": {"chapter_id": "Chapter 16"}},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = json.loads(response.json()["result"]["content"][0]["text"])
+    assert payload["chapter_id"] == "Chapter_16"
+
+
+def test_rag_client_prefixes_work_routes() -> None:
+    client = RagApiClient(work="sample")
+    assert client._path("/search/raw") == "/works/sample/search/raw"
