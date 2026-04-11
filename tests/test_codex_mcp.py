@@ -110,6 +110,24 @@ def test_tools_list_exposes_writing_oriented_tools() -> None:
     ]
 
 
+def test_writing_lookup_schema_avoids_nullable_enum_patterns() -> None:
+    server = WritingAssistantMcpServer(rag_client=FakeRagClient())
+
+    response = server.handle_request({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+
+    assert response is not None
+    writing_lookup_tool = next(tool for tool in response["result"]["tools"] if tool["name"] == "writing_lookup")
+    schema = writing_lookup_tool["inputSchema"]
+    properties = schema["properties"]
+
+    assert properties["question"] == {"type": "string"}
+    assert properties["chapter_id"] == {"type": "string"}
+    assert properties["mode"] == {
+        "type": "string",
+        "enum": ["source_overview", "scene_detail", "exact_quote", "exact_location"],
+    }
+
+
 def test_writing_lookup_orchestrates_summary_first_retrieval() -> None:
     server = WritingAssistantMcpServer(rag_client=FakeRagClient())
 
